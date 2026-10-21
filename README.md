@@ -1,10 +1,6 @@
 # ACS Platform
 
-Backend (Express + Mongoose) and dashboard (Next.js Pages Router + Tailwind v4).
+GenieACS + Express API (`backend/`) + Next.js dashboard (`dashboard/`), deployed with Docker Compose and Caddy (`infra/`).
 
-```
-cd backend && npm i && npm run seed && npm run dev      # :4000, admin@local / changeme123
-cd dashboard && npm i && npm run dev                     # :3000
-```
-
-Requires GenieACS NBI on :7557 and MongoDB on :27017.
+- Deploy / update on the VPS: see `infra/README.md`
+- Local dev: see `infra/README.md` → Local dev

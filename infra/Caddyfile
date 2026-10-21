@@ -1,0 +1,21 @@
+{
+	email {$ACME_EMAIL}
+}
+
+{$API_DOMAIN} {
+	encode zstd gzip
+	handle /api/* {
+		reverse_proxy api:4000
+	}
+	handle {
+		reverse_proxy dashboard:3000
+	}
+}
+
+{$ACS_DOMAIN} {
+	reverse_proxy genieacs-cwmp:7547
+}
+
+http://{$ACS_DOMAIN} {
+	reverse_proxy genieacs-cwmp:7547
+}

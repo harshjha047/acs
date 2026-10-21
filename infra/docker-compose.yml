@@ -1,45 +1,97 @@
+name: acs
+
 x-genieacs: &genieacs
-  build: .
+  image: acs/genieacs:1.2.16
+  build: ./genieacs
   restart: unless-stopped
-  depends_on: [mongo]
   environment:
-    GENIEACS_MONGODB_CONNECTION_URL: mongodb://mongo:27017/genieacs
-    GENIEACS_UI_JWT_SECRET: ${GENIEACS_UI_JWT_SECRET:-change-me-ui-secret}
-    GENIEACS_CWMP_ACCESS_LOG_FILE: /dev/stdout
-    GENIEACS_NBI_ACCESS_LOG_FILE: /dev/stdout
+    GENIEACS_MONGODB_CONNECTION_URL: mongodb://${MONGO_USER}:${MONGO_PASS}@mongo:27017/genieacs?authSource=admin
+    GENIEACS_EXT_DIR: /opt/genieacs/ext
+    GENIEACS_UI_JWT_SECRET: ${GENIEACS_UI_JWT_SECRET}
+  volumes:
+    - ./ext:/opt/genieacs/ext:ro
+  depends_on:
+    mongo:
+      condition: service_healthy
 
 services:
   mongo:
-    image: mongo:6
+    image: mongo:8.0
     restart: unless-stopped
+    command: ["--wiredTigerCacheSizeGB", "2"]
+    environment:
+      MONGO_INITDB_ROOT_USERNAME: ${MONGO_USER}
+      MONGO_INITDB_ROOT_PASSWORD: ${MONGO_PASS}
+    ports: ["127.0.0.1:${MONGO_PORT:-27017}:27017"]
     volumes:
-      - mongo_data:/data/db
-    ports:
-      - "127.0.0.1:27017:27017"
+      - mongo-data:/data/db
+    healthcheck:
+      test: ["CMD", "mongosh", "--quiet", "--eval", "db.adminCommand('ping')"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
 
-  cwmp:
+  genieacs-cwmp:
     <<: *genieacs
     command: genieacs-cwmp
-    ports:
-      - "7547:7547"
+    ports: ["7547:7547"]
 
-  nbi:
+  genieacs-nbi:
     <<: *genieacs
     command: genieacs-nbi
-    ports:
-      - "127.0.0.1:7557:7557"
+    ports: ["127.0.0.1:7557:7557"]
 
-  fs:
+  genieacs-fs:
     <<: *genieacs
     command: genieacs-fs
-    ports:
-      - "7567:7567"
+    ports: ["127.0.0.1:7567:7567"]
 
-  ui:
+  genieacs-ui:
     <<: *genieacs
     command: genieacs-ui
-    ports:
-      - "127.0.0.1:3001:3000"
+    ports: ["127.0.0.1:${GENIEACS_UI_PORT:-3000}:3000"]
+
+  api:
+    profiles: [prod]
+    build: ../backend
+    image: acs/api
+    restart: unless-stopped
+    environment:
+      MONGO_URI: mongodb://${MONGO_USER}:${MONGO_PASS}@mongo:27017/acs_app?authSource=admin
+      GENIEACS_NBI_URL: http://genieacs-nbi:7557
+      JWT_SECRET: ${JWT_SECRET}
+      CORS_ORIGIN: https://${API_DOMAIN}
+      ADMIN_EMAIL: ${ADMIN_EMAIL}
+      ADMIN_PASSWORD: ${ADMIN_PASSWORD}
+    depends_on:
+      mongo:
+        condition: service_healthy
+      genieacs-nbi:
+        condition: service_started
+
+  dashboard:
+    profiles: [prod]
+    build: ../dashboard
+    image: acs/dashboard
+    restart: unless-stopped
+    depends_on: [api]
+
+  caddy:
+    profiles: [prod]
+    image: caddy:2-alpine
+    restart: unless-stopped
+    ports: ["80:80", "443:443"]
+    environment:
+      API_DOMAIN: ${API_DOMAIN}
+      ACS_DOMAIN: ${ACS_DOMAIN}
+      ACME_EMAIL: ${ACME_EMAIL}
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy-data:/data
+      - caddy-config:/config
+    depends_on: [api, dashboard, genieacs-cwmp]
 
 volumes:
-  mongo_data:
+  mongo-data:
+  caddy-data:
+  caddy-config:

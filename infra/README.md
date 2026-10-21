@@ -1,26 +1,57 @@
-# Infra: GenieACS + simulator
+# Infra
 
-## Start GenieACS
+One compose project (`acs`) for both the VPS and local dev.
+
+| Service | Exposure |
+|---|---|
+| genieacs-cwmp | `7547` public, and via Caddy on `ACS_DOMAIN` (80/443) |
+| genieacs-nbi / fs / ui, mongo | `127.0.0.1` only |
+| api, dashboard, caddy | profile `prod`; Caddy serves `API_DOMAIN` (`/api/*` → api, rest → dashboard) |
+
+## VPS: first deploy (migrating from the hand-built `/opt/acs`)
+
+    sudo git clone https://github.com/harshjha047/acs.git /opt/acs/repo && sudo chown -R deploy:deploy /opt/acs/repo
+    cd /opt/acs/repo/infra
+    cp /opt/acs/.env .env
+    cat >> .env <<EOF
+    COMPOSE_PROFILES=prod
+    JWT_SECRET=$(openssl rand -hex 64)
+    API_DOMAIN=tr069-api.thediv.in
+    ACS_DOMAIN=acs.thediv.in
+    ACME_EMAIL=info@thediv.in
+    ADMIN_EMAIL=info@thediv.in
+    ADMIN_PASSWORD=<min 12 chars>
+    EOF
+    chmod 600 .env
+
+    docker stop cpe-sim
+    (cd /opt/acs && docker compose down)
     docker compose up -d --build
+    docker start cpe-sim
+    docker compose exec api node scripts/seedAdmin.js
+
+Volumes (`acs_mongo-data`, `acs_caddy-data`) are reused because the project name stays `acs`.
+After this works, delete the old `/opt/acs/docker-compose.yml`, `Caddyfile` and `genieacs/` to avoid running the wrong stack.
+
+## VPS: update
+
+    cd /opt/acs/repo && git pull && cd infra && docker compose up -d --build
+
+## Checks
+
     docker compose ps
+    curl -s https://tr069-api.thediv.in/api/health      # {"ok":true}
+    curl -s -o /dev/null -w "%{http_code}\n" https://acs.thediv.in/   # 405
 
-- CWMP (devices): :7547
-- NBI (your API only): 127.0.0.1:7557
-- GenieACS UI: http://localhost:3001 (mapped to 3001 so it doesn't clash with the Next.js dashboard on 3000)
-- MongoDB: 127.0.0.1:27017 (the backend uses a separate `acs_app` DB on the same server)
+## Local dev
 
-First visit to the GenieACS UI: create a user from the login screen prompt if asked (GenieACS 1.2 allows any login when auth isn't configured).
+    cp .env.example .env   # set COMPOSE_PROFILES= and GENIEACS_UI_PORT=3001
+    docker compose up -d --build
+    cd ../backend && cp .env.example .env && npm i && npm run seed && npm run dev
+    cd ../dashboard && NEXT_PUBLIC_API_URL=http://localhost:4000/api npm run dev
 
-## Virtual router (simulator)
-    git clone https://github.com/zaidka/genieacs-sim.git
-    cd genieacs-sim
-    npm install
-    node genieacs-sim -u http://127.0.0.1:7547/
+Simulator: `git clone https://github.com/genieacs/genieacs-sim && cd genieacs-sim && npm i && node genieacs-sim -u http://127.0.0.1:7547/ -s 1`
 
-Simulates device `202BC1-BM632w-000000`. Leave it running; it informs every 300s.
-More devices: `node genieacs-sim -u http://127.0.0.1:7547/ -p 5 -s 1` (serial offset avoids the 000000 clash).
+## Provisions
 
-Note: connection-request push fails from Docker on localhost (NAT). Tasks are delivered on the next periodic inform instead. Expected locally, not on a VPS.
-
-## Provisioning the ACS database for a VPS
-Open 7547 only. Keep 7557, 27017 and the UI private.
+`node seedProvision.js` (on the VPS) installs the `refresh` provision/preset via NBI.

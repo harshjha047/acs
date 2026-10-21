@@ -3,7 +3,7 @@ import { createContext, useCallback, useContext, useState } from "react";
 const ToastCtx = createContext(() => {});
 export const useToast = () => useContext(ToastCtx);
 
-const tones = { ok: "border-ok", bad: "border-bad", muted: "border-muted" };
+const tones = { ok: "border-ok", bad: "border-bad", warn: "border-warn", muted: "border-muted" };
 
 export function ToastProvider({ children }) {
   const [items, setItems] = useState([]);

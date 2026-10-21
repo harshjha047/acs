@@ -89,10 +89,11 @@ export default function DeviceDetail() {
   async function act(kind, url, okMsg) {
     setBusy(kind);
     try {
-      await api.post(url);
-      toast(okMsg, "ok");
-    } catch {
-      toast(`${kind} failed`, "bad");
+      const { status } = await api.post(url);
+      if (status === 202) toast(`${kind} queued. Device is not reachable now; it runs on the next inform.`, "warn");
+      else toast(okMsg, "ok");
+    } catch (err) {
+      toast(err.response?.data?.error || `${kind} failed`, "bad");
     } finally {
       setBusy("");
       setConfirmOpen(false);
@@ -122,7 +123,7 @@ export default function DeviceDetail() {
               </dl>
               <div className="flex gap-2">
                 <Button variant="secondary" onClick={load}>Reload</Button>
-                <Button variant="secondary" disabled={!!busy} onClick={() => act("Refresh", `/devices/${id}/refresh`, "Refresh queued. Values update after the next device inform.")}>
+                <Button variant="secondary" disabled={!!busy} onClick={() => act("Refresh", `/devices/${id}/refresh`, "Parameters refreshed. Click Reload.")}>
                   {busy === "Refresh" ? "Queuing..." : "Refresh from device"}
                 </Button>
                 <Button variant="danger" onClick={() => setConfirmOpen(true)}>Reboot</Button>
@@ -214,7 +215,7 @@ export default function DeviceDetail() {
         footer={
           <>
             <Button variant="secondary" onClick={() => setConfirmOpen(false)}>Cancel</Button>
-            <Button variant="danger" disabled={!!busy} onClick={() => act("Reboot", `/devices/${id}/reboot`, "Reboot queued")}>
+            <Button variant="danger" disabled={!!busy} onClick={() => act("Reboot", `/devices/${id}/reboot`, "Reboot sent to device")}>
               {busy === "Reboot" ? "Rebooting..." : "Reboot"}
             </Button>
           </>

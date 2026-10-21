@@ -1,18 +1,35 @@
 require("dotenv").config();
 const express = require("express");
 const cors = require("cors");
+const helmet = require("helmet");
 const mongoose = require("mongoose");
 
-const app = express();
-app.use(cors({ origin: "http://localhost:3000" }));
-app.use(express.json());
+for (const key of ["MONGO_URI", "JWT_SECRET", "GENIEACS_NBI_URL"]) {
+  if (!process.env[key]) throw new Error(`Missing env ${key}`);
+}
 
+const app = express();
+app.set("trust proxy", 1);
+app.use(helmet());
+app.use(cors({ origin: (process.env.CORS_ORIGIN || "http://localhost:3000").split(",") }));
+app.use(express.json({ limit: "100kb" }));
+
+app.get("/api/health", (req, res) => res.json({ ok: mongoose.connection.readyState === 1 }));
 app.use("/api/auth", require("./routes/auth"));
 app.use("/api/devices", require("./routes/devices"));
 app.use("/api/audit", require("./routes/audit"));
 
+app.use((req, res) => res.status(404).json({ error: "Not found" }));
+
+app.use((err, req, res, next) => {
+  const status = err.status && err.status < 500 ? err.status : err.isAxiosError || err.status ? 502 : 500;
+  if (status >= 500) console.error(err);
+  res.status(status).json({ error: status === 500 ? "Internal error" : err.message });
+});
+
+const port = process.env.PORT || 4000;
 mongoose.connect(process.env.MONGO_URI)
-  .then(() => app.listen(process.env.PORT, () => console.log(`API on :${process.env.PORT}`)))
+  .then(() => app.listen(port, () => console.log(`API on :${port}`)))
   .catch(err => {
     console.error("Mongo connection failed:", err.message);
     process.exit(1);
