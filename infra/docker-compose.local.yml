@@ -1,0 +1,13 @@
+x-noauth: &noauth
+  environment:
+    GENIEACS_MONGODB_CONNECTION_URL: mongodb://mongo:27017/genieacs
+
+services:
+  mongo:
+    environment:
+      MONGO_INITDB_ROOT_USERNAME: ""
+      MONGO_INITDB_ROOT_PASSWORD: ""
+  genieacs-cwmp: *noauth
+  genieacs-nbi: *noauth
+  genieacs-fs: *noauth
+  genieacs-ui: *noauth
