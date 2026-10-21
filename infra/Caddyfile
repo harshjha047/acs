@@ -2,6 +2,16 @@
 	email {$ACME_EMAIL}
 }
 
+(acs) {
+	handle_path /speedtest/* {
+		root * /srv/speedtest
+		file_server
+	}
+	handle {
+		reverse_proxy genieacs-cwmp:7547
+	}
+}
+
 {$API_DOMAIN} {
 	encode zstd gzip
 	handle /api/* {
@@ -13,9 +23,9 @@
 }
 
 {$ACS_DOMAIN} {
-	reverse_proxy genieacs-cwmp:7547
+	import acs
 }
 
 http://{$ACS_DOMAIN} {
-	reverse_proxy genieacs-cwmp:7547
+	import acs
 }

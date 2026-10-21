@@ -1,210 +1,141 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { useRouter } from "next/router";
 import api from "../../lib/api";
+import { ago, apiError } from "../../lib/format";
 import Shell from "../../components/Shell";
 import Card from "../../components/ui/Card";
 import Button from "../../components/ui/Button";
 import Badge from "../../components/ui/Badge";
+import Field from "../../components/ui/Field";
 import Modal from "../../components/ui/Modal";
 import { useToast } from "../../components/ui/Toast";
+import HealthCard from "../../components/device/HealthCard";
+import OpticalCard from "../../components/device/OpticalCard";
+import WifiPanel from "../../components/device/WifiPanel";
+import ClientsPanel from "../../components/device/ClientsPanel";
+import ToolsPanel from "../../components/device/ToolsPanel";
+import TimelinePanel from "../../components/device/TimelinePanel";
+import ReadinessPanel from "../../components/device/ReadinessPanel";
+import ParamsTable from "../../components/device/ParamsTable";
+import CustomerLink from "../../components/device/CustomerLink";
 
-const SECTIONS = [
-  { title: "Device info", marker: ".DeviceInfo." },
-  { title: "WAN", marker: ".WANDevice." },
-  { title: "Wi-Fi", marker: ".WLANConfiguration." },
-  { title: "Management", marker: ".ManagementServer." }
+const TABS = [
+  ["overview", "Overview"],
+  ["wifi", "Wi-Fi & devices"],
+  ["tools", "Tools"],
+  ["timeline", "History & notes"],
+  ["readiness", "Readiness"],
+  ["params", "All parameters"]
 ];
-
-const HOST_RE = /\.Hosts\.Host\.(\d+)\.(\w+)$/;
-const statusTone = { provisioned: "ok", unprovisioned: "muted", flagged: "warn", decommissioned: "bad" };
-
-function Field({ label, value }) {
-  return (
-    <div className="min-w-0">
-      <dt className="truncate font-mono text-[11px] uppercase tracking-widest text-ink-3" title={label}>{label}</dt>
-      <dd className="mt-1 break-words text-sm font-semibold text-plum">{String(value)}</dd>
-    </div>
-  );
-}
 
 export default function DeviceDetail() {
   const router = useRouter();
   const { id } = router.query;
   const toast = useToast();
-
   const [device, setDevice] = useState(null);
-  const [data, setData] = useState(null);
-  const [loading, setLoading] = useState(true);
+  const [summary, setSummary] = useState(null);
   const [error, setError] = useState("");
   const [tab, setTab] = useState("overview");
-  const [query, setQuery] = useState("");
-  const [showEmpty, setShowEmpty] = useState(false);
-  const [confirmOpen, setConfirmOpen] = useState(false);
   const [busy, setBusy] = useState("");
+  const [confirmOpen, setConfirmOpen] = useState(false);
+  const [version, setVersion] = useState(0);
 
   const load = useCallback(async () => {
     if (!id) return;
-    setLoading(true);
     setError("");
     try {
-      const [d, p] = await Promise.all([api.get(`/devices/${id}`), api.get(`/devices/${id}/parameters`)]);
+      const [d, s] = await Promise.all([api.get(`/devices/${id}`), api.get(`/devices/${id}/summary`)]);
       setDevice(d.data);
-      setData(p.data);
-    } catch {
-      setError("Failed to load device");
-    } finally {
-      setLoading(false);
+      setSummary(s.data);
+    } catch (err) {
+      setError(apiError(err, "Failed to load device"));
     }
   }, [id]);
 
   useEffect(() => { load(); }, [load]);
+  useEffect(() => { if (router.query.tab) setTab(String(router.query.tab)); }, [router.query.tab]);
 
-  const params = data?.parameters || [];
-  const populated = useMemo(() => params.filter(p => p.value !== null && p.value !== ""), [params]);
-
-  const sections = useMemo(() => SECTIONS.map(s => ({
-    title: s.title,
-    items: populated.filter(p => p.path.includes(s.marker)).map(p => ({
-      label: p.path.slice(p.path.indexOf(s.marker) + s.marker.length),
-      value: p.value
-    }))
-  })).filter(s => s.items.length), [populated]);
-
-  const hosts = useMemo(() => {
-    const rows = {};
-    for (const p of populated) {
-      const m = p.path.match(HOST_RE);
-      if (m) (rows[m[1]] ||= {})[m[2]] = p.value;
-    }
-    return Object.entries(rows).sort((a, b) => a[0] - b[0]).map(([n, r]) => ({ n, ...r }));
-  }, [populated]);
-
-  const table = useMemo(() => {
-    const q = query.trim().toLowerCase();
-    return (showEmpty ? params : populated).filter(p =>
-      !q || p.path.toLowerCase().includes(q) || String(p.value ?? "").toLowerCase().includes(q)
-    );
-  }, [params, populated, query, showEmpty]);
-
-  async function act(kind, url, okMsg) {
-    setBusy(kind);
+  async function refresh() {
+    setBusy("refresh");
     try {
-      const { status } = await api.post(url);
-      if (status === 202) toast(`${kind} queued. Device is not reachable now; it runs on the next inform.`, "warn");
-      else toast(okMsg, "ok");
+      const { status } = await api.post(`/devices/${id}/refresh?scope=summary`);
+      toast(status === 202 ? "Queued. Device is not reachable now; values update after its next check-in." : "Live values fetched.", status === 202 ? "warn" : "ok");
+      await load();
+      setVersion(v => v + 1);
     } catch (err) {
-      toast(err.response?.data?.error || `${kind} failed`, "bad");
+      toast(apiError(err, "Refresh failed"), "bad");
+    } finally {
+      setBusy("");
+    }
+  }
+
+  async function reboot() {
+    setBusy("reboot");
+    try {
+      const { status } = await api.post(`/devices/${id}/reboot`);
+      toast(status === 202 ? "Reboot queued; runs when the device next checks in." : "Reboot sent. Device will be offline for 1-3 minutes.", status === 202 ? "warn" : "ok");
+    } catch (err) {
+      toast(apiError(err, "Reboot failed"), "bad");
     } finally {
       setBusy("");
       setConfirmOpen(false);
     }
   }
 
-  const tabBtn = name => `rounded-control px-4 py-2 text-sm font-semibold ${tab === name ? "bg-plum text-white" : "text-ink-2 hover:bg-white"}`;
+  const online = summary?.online.state;
+  const tabBtn = name => `whitespace-nowrap rounded-control px-4 py-2 text-sm font-semibold ${tab === name ? "bg-plum text-white" : "text-ink-2 hover:bg-white"}`;
 
   return (
     <Shell title={device ? `Device ${device.serialNumber}` : "Device"}>
-      {loading && <p className="text-sm">Loading...</p>}
+      {!device && !error && <p className="text-sm">Loading...</p>}
       {error && <p className="text-sm font-semibold text-bad">{error}</p>}
 
       {device && (
         <>
           <Card className="mb-4">
-            <div className="flex flex-wrap items-center justify-between gap-4">
+            <div className="flex flex-wrap items-start justify-between gap-6">
               <dl className="grid grid-cols-2 gap-6 md:grid-cols-5">
+                <Field label="Status">
+                  <Badge tone={online === "online" ? "ok" : online === "offline" ? "bad" : "muted"}>{online || "…"}</Badge>
+                  <span className="ml-2 text-xs font-normal text-ink-2">{summary && ago(summary.lastInform)}</span>
+                </Field>
                 <Field label="Manufacturer" value={device.manufacturer} />
                 <Field label="Model" value={device.productClass} />
-                <Field label="OUI" value={device.oui} />
-                <Field label="Last inform" value={data?.lastInform ? new Date(data.lastInform).toLocaleString() : "—"} />
-                <div>
-                  <dt className="font-mono text-[11px] uppercase tracking-widest text-ink-3">Status</dt>
-                  <dd className="mt-1"><Badge tone={statusTone[device.status]}>{device.status}</Badge></dd>
-                </div>
+                <Field label="PPPoE / WAN IP" value={summary?.wan.primary?.Username || summary?.wan.primary?.ExternalIPAddress} mono />
+                <Field label="Customer"><CustomerLink device={device} onChange={setDevice} /></Field>
               </dl>
-              <div className="flex gap-2">
-                <Button variant="secondary" onClick={load}>Reload</Button>
-                <Button variant="secondary" disabled={!!busy} onClick={() => act("Refresh", `/devices/${id}/refresh`, "Parameters refreshed. Click Reload.")}>
-                  {busy === "Refresh" ? "Queuing..." : "Refresh from device"}
-                </Button>
-                <Button variant="danger" onClick={() => setConfirmOpen(true)}>Reboot</Button>
+              <div className="flex flex-wrap gap-2">
+                <Button variant="secondary" disabled={!!busy} onClick={refresh}>{busy === "refresh" ? "Fetching..." : "Refresh live"}</Button>
+                <Button variant="danger" disabled={!!busy} onClick={() => setConfirmOpen(true)}>Reboot</Button>
               </div>
             </div>
           </Card>
 
-          <div className="mb-4 flex gap-2">
-            <button className={tabBtn("overview")} onClick={() => setTab("overview")}>Overview</button>
-            <button className={tabBtn("params")} onClick={() => setTab("params")}>All parameters ({populated.length}/{params.length})</button>
+          <div className="mb-4 flex gap-2 overflow-x-auto">
+            {TABS.map(([key, label]) => <button key={key} className={tabBtn(key)} onClick={() => setTab(key)}>{label}</button>)}
           </div>
 
-          {tab === "overview" && (
+          {tab === "overview" && summary && (
             <div className="grid gap-4 lg:grid-cols-2">
-              {sections.map(s => (
-                <Card key={s.title} title={s.title}>
-                  <dl className="grid grid-cols-2 gap-4">
-                    {s.items.map(i => <Field key={i.label} label={i.label} value={i.value} />)}
+              <HealthCard summary={summary} />
+              <div className="grid content-start gap-4">
+                <OpticalCard optical={summary.optical} />
+                <Card title="At a glance">
+                  <dl className="grid grid-cols-2 gap-5 md:grid-cols-4">
+                    <Field label="Active devices" value={summary.counts.activeClients} />
+                    <Field label="On Wi-Fi" value={summary.counts.wifiClients} />
+                    <Field label="LAN ports up" value={summary.counts.lanPortsUp} />
+                    <Field label="Wi-Fi on" value={summary.wifi.filter(w => w.enabled).map(w => w.ssid).join(", ") || "none"} />
                   </dl>
                 </Card>
-              ))}
-              <Card title={`LAN hosts (${hosts.length})`} className="lg:col-span-2">
-                {hosts.length === 0 ? <p className="text-sm text-ink-2">No hosts reported.</p> : (
-                  <table className="w-full text-sm">
-                    <thead>
-                      <tr className="border-b border-line text-left font-mono text-[11px] uppercase tracking-widest text-ink-3">
-                        <th className="py-2">#</th><th>Host name</th><th>IP</th><th>MAC</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {hosts.map(h => (
-                        <tr key={h.n} className="border-b border-line/60">
-                          <td className="py-2">{h.n}</td>
-                          <td>{h.HostName || "—"}</td>
-                          <td className="font-mono">{h.IPAddress || "—"}</td>
-                          <td className="font-mono">{h.MACAddress || "—"}</td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                )}
-              </Card>
+              </div>
             </div>
           )}
-
-          {tab === "params" && (
-            <Card>
-              <div className="mb-4 flex flex-wrap items-center gap-4">
-                <input
-                  value={query}
-                  onChange={e => setQuery(e.target.value)}
-                  placeholder="Filter by path or value"
-                  className="h-11 w-80 rounded-control border border-line px-4 text-sm outline-none focus:border-plum"
-                />
-                <label className="flex items-center gap-2 text-sm">
-                  <input type="checkbox" checked={showEmpty} onChange={e => setShowEmpty(e.target.checked)} />
-                  Show parameters without a value
-                </label>
-                <span className="font-mono text-xs text-ink-3">{table.length} shown</span>
-              </div>
-              <div className="overflow-x-auto">
-                <table className="w-full text-sm">
-                  <thead>
-                    <tr className="border-b border-line text-left font-mono text-[11px] uppercase tracking-widest text-ink-3">
-                      <th className="py-2">Path</th><th>Value</th><th>Type</th><th>Writable</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {table.map(p => (
-                      <tr key={p.path} className="border-b border-line/60 align-top">
-                        <td className="py-2 pr-4 font-mono text-xs">{p.path}</td>
-                        <td className="break-all pr-4 font-semibold text-plum">{p.value === null ? "—" : String(p.value)}</td>
-                        <td className="pr-4 text-ink-2">{p.type?.replace("xsd:", "") || "—"}</td>
-                        <td>{p.writable ? "yes" : "no"}</td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            </Card>
-          )}
+          {tab === "wifi" && <div key={version} className="grid gap-4"><WifiPanel deviceId={id} /><ClientsPanel deviceId={id} /></div>}
+          {tab === "tools" && <ToolsPanel deviceId={id} />}
+          {tab === "timeline" && <TimelinePanel key={version} deviceId={id} />}
+          {tab === "readiness" && <ReadinessPanel deviceId={id} />}
+          {tab === "params" && <ParamsTable key={version} deviceId={id} />}
         </>
       )}
 
@@ -215,13 +146,11 @@ export default function DeviceDetail() {
         footer={
           <>
             <Button variant="secondary" onClick={() => setConfirmOpen(false)}>Cancel</Button>
-            <Button variant="danger" disabled={!!busy} onClick={() => act("Reboot", `/devices/${id}/reboot`, "Reboot sent to device")}>
-              {busy === "Reboot" ? "Rebooting..." : "Reboot"}
-            </Button>
+            <Button variant="danger" disabled={busy === "reboot"} onClick={reboot}>{busy === "reboot" ? "Rebooting..." : "Reboot"}</Button>
           </>
         }
       >
-        The customer's connection will drop for a few minutes.
+        The customer’s internet and Wi-Fi will drop for 1-3 minutes.
       </Modal>
     </Shell>
   );

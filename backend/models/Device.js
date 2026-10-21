@@ -11,7 +11,17 @@ const DeviceSchema = new Schema({
   status: { type: String, enum: ["provisioned", "unprovisioned", "flagged", "decommissioned"], default: "unprovisioned" },
   firstSeenAt: { type: Date, default: Date.now },
   lastInformAt: { type: Date },
-  tags: [{ type: String }]
+  tags: [{ type: String }],
+  pppoeUsername: { type: String, index: true },
+  macAddress: { type: String, index: true },
+  wanIp: { type: String },
+  softwareVersion: { type: String },
+  rxPower: { type: Number },
+  rxGrade: { type: String },
+  informInterval: { type: Number },
+  lastSummaryAt: { type: Date }
 }, { timestamps: true });
+
+DeviceSchema.index({ serialNumber: 1 });
 
 module.exports = model("Device", DeviceSchema);

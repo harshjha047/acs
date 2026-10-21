@@ -63,6 +63,7 @@ services:
       CORS_ORIGIN: https://${API_DOMAIN}
       ADMIN_EMAIL: ${ADMIN_EMAIL}
       ADMIN_PASSWORD: ${ADMIN_PASSWORD}
+      SPEEDTEST_URL: http://${ACS_DOMAIN}/speedtest/50MB.bin
     depends_on:
       mongo:
         condition: service_healthy
@@ -87,6 +88,7 @@ services:
       ACME_EMAIL: ${ACME_EMAIL}
     volumes:
       - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - ./speedtest:/srv/speedtest:ro
       - caddy-data:/data
       - caddy-config:/config
     depends_on: [api, dashboard, genieacs-cwmp]

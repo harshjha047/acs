@@ -46,12 +46,18 @@ After this works, delete the old `/opt/acs/docker-compose.yml`, `Caddyfile` and 
 ## Local dev
 
     cp .env.example .env   # set COMPOSE_PROFILES= and GENIEACS_UI_PORT=3001
-    docker compose up -d --build
+    docker compose -f docker-compose.yml -f docker-compose.local.yml up -d --build   # Mongo without auth
     cd ../backend && cp .env.example .env && npm i && npm run seed && npm run dev
     cd ../dashboard && NEXT_PUBLIC_API_URL=http://localhost:4000/api npm run dev
 
 Simulator: `git clone https://github.com/genieacs/genieacs-sim && cd genieacs-sim && npm i && node genieacs-sim -u http://127.0.0.1:7547/ -s 1`
 
-## Provisions
+## One-time extras (VPS)
 
-`node seedProvision.js` (on the VPS) installs the `refresh` provision/preset via NBI.
+    cd /opt/acs/repo/infra
+    head -c 50M /dev/zero > speedtest/50MB.bin
+    docker run --rm --network acs_default -e NBI_URL=http://genieacs-nbi:7557 -v "$PWD":/w node:24-alpine node /w/seedProvision.js
+    docker compose up -d
+
+- `speedtest/50MB.bin`: file the router downloads for the TR-143 speed test (`http://ACS_DOMAIN/speedtest/50MB.bin`).
+- `seedProvision.js`: installs provisions/presets `refresh` (light refresh every periodic inform) and `diagnostics` (fetches ping/speed results on `8 DIAGNOSTICS COMPLETE`).

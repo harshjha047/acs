@@ -1,57 +1,67 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import api from "../../lib/api";
+import { ago, gradeTone, onlineState } from "../../lib/format";
 import Shell from "../../components/Shell";
 import Card from "../../components/ui/Card";
 import Badge from "../../components/ui/Badge";
+import { Table, Row, Cell } from "../../components/ui/Table";
 
-const statusTone = { provisioned: "ok", unprovisioned: "muted", flagged: "warn", decommissioned: "bad" };
+const tone = { online: "ok", offline: "bad", unknown: "muted" };
 
 export default function DeviceList() {
   const [devices, setDevices] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
+  const [q, setQ] = useState("");
 
   useEffect(() => {
-    api.get("/devices")
-      .then(({ data }) => setDevices(data))
-      .catch(() => setError("Failed to load devices"))
-      .finally(() => setLoading(false));
-  }, []);
+    setLoading(true);
+    const t = setTimeout(() => {
+      api.get("/devices", { params: q.trim() ? { q: q.trim() } : {} })
+        .then(({ data }) => { setDevices(data); setError(""); })
+        .catch(() => setError("Failed to load devices"))
+        .finally(() => setLoading(false));
+    }, q ? 300 : 0);
+    return () => clearTimeout(t);
+  }, [q]);
+
+  const offline = devices.filter(d => onlineState(d) === "offline").length;
 
   return (
     <Shell title="Devices">
+      <div className="mb-4 flex flex-wrap items-center gap-4">
+        <input
+          autoFocus
+          value={q}
+          onChange={e => setQ(e.target.value)}
+          placeholder="Search customer name, phone, account ID, PPPoE user, serial, MAC or IP"
+          className="h-12 w-full max-w-xl rounded-control border border-line bg-white px-4 text-sm outline-none focus:border-plum"
+        />
+        {!loading && <span className="text-sm text-ink-2">{devices.length} devices{offline ? ` · ${offline} offline` : ""}</span>}
+      </div>
       <Card>
-        {loading && <p className="text-sm">Loading...</p>}
+        {loading && devices.length === 0 && <p className="text-sm">Loading...</p>}
         {error && <p className="text-sm font-semibold text-bad">{error}</p>}
-        {!loading && !error && devices.length === 0 && <p className="text-sm text-ink-2">No devices have connected yet.</p>}
-        {!loading && devices.length > 0 && (
-          <table className="w-full text-sm">
-            <thead>
-              <tr className="border-b border-line text-left font-mono text-[11px] uppercase tracking-widest text-ink-3">
-                <th className="py-2">Serial</th>
-                <th>Manufacturer</th>
-                <th>Model</th>
-                <th>Status</th>
-                <th>Last inform</th>
-                <th />
-              </tr>
-            </thead>
-            <tbody>
-              {devices.map(d => (
-                <tr key={d._id} className="border-b border-line/60">
-                  <td className="py-3 font-mono">{d.serialNumber}</td>
-                  <td>{d.manufacturer}</td>
-                  <td>{d.productClass}</td>
-                  <td><Badge tone={statusTone[d.status]}>{d.status}</Badge></td>
-                  <td>{d.lastInformAt ? new Date(d.lastInformAt).toLocaleString() : "—"}</td>
-                  <td className="text-right">
-                    <Link href={`/devices/${d._id}`} className="font-semibold text-plum underline">View</Link>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
+        {!loading && !error && devices.length === 0 && <p className="text-sm text-ink-2">{q ? "No matches." : "No devices have connected yet."}</p>}
+        {devices.length > 0 && (
+          <Table head={["Status", "Customer", "PPPoE / IP", "Serial", "Model", "Rx", "Last seen", ""]}>
+            {devices.map(d => {
+              const state = onlineState(d);
+              return (
+                <Row key={d._id}>
+                  <Cell><Badge tone={tone[state]}>{state}</Badge></Cell>
+                  <Cell>{d.customer ? <><div className="font-semibold text-plum">{d.customer.name}</div><div className="font-mono text-xs text-ink-2">{d.customer.accountId}</div></> : <span className="text-ink-3">unlinked</span>}</Cell>
+                  <Cell mono>{d.pppoeUsername || d.wanIp}</Cell>
+                  <Cell mono>{d.serialNumber}</Cell>
+                  <Cell>{d.manufacturer?.split(" ")[0]} {d.productClass}</Cell>
+                  <Cell>{d.rxPower !== undefined && d.rxPower !== null ? <Badge tone={gradeTone(d.rxGrade)}>{d.rxPower} dBm</Badge> : "—"}</Cell>
+                  <Cell>{ago(d.lastInformAt)}</Cell>
+                  <Cell className="text-right"><Link href={`/devices/${d._id}`} className="font-semibold text-plum underline">Open</Link></Cell>
+                </Row>
+              );
+            })}
+          </Table>
         )}
       </Card>
     </Shell>

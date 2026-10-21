@@ -18,6 +18,8 @@ app.get("/api/health", (req, res) => res.json({ ok: mongoose.connection.readySta
 app.use("/api/auth", require("./routes/auth"));
 app.use("/api/devices", require("./routes/devices"));
 app.use("/api/audit", require("./routes/audit"));
+app.use("/api/customers", require("./routes/customers"));
+app.use("/api/profiles", require("./routes/profiles"));
 
 app.use((req, res) => res.status(404).json({ error: "Not found" }));
 
