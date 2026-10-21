@@ -1,0 +1,45 @@
+x-genieacs: &genieacs
+  build: .
+  restart: unless-stopped
+  depends_on: [mongo]
+  environment:
+    GENIEACS_MONGODB_CONNECTION_URL: mongodb://mongo:27017/genieacs
+    GENIEACS_UI_JWT_SECRET: ${GENIEACS_UI_JWT_SECRET:-change-me-ui-secret}
+    GENIEACS_CWMP_ACCESS_LOG_FILE: /dev/stdout
+    GENIEACS_NBI_ACCESS_LOG_FILE: /dev/stdout
+
+services:
+  mongo:
+    image: mongo:6
+    restart: unless-stopped
+    volumes:
+      - mongo_data:/data/db
+    ports:
+      - "127.0.0.1:27017:27017"
+
+  cwmp:
+    <<: *genieacs
+    command: genieacs-cwmp
+    ports:
+      - "7547:7547"
+
+  nbi:
+    <<: *genieacs
+    command: genieacs-nbi
+    ports:
+      - "127.0.0.1:7557:7557"
+
+  fs:
+    <<: *genieacs
+    command: genieacs-fs
+    ports:
+      - "7567:7567"
+
+  ui:
+    <<: *genieacs
+    command: genieacs-ui
+    ports:
+      - "127.0.0.1:3001:3000"
+
+volumes:
+  mongo_data:

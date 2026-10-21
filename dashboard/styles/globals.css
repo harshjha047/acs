@@ -1,0 +1,44 @@
+@import "tailwindcss";
+
+@theme {
+  --font-sans: var(--font-jakarta), ui-sans-serif, system-ui, sans-serif;
+  --font-mono: var(--font-plex), ui-monospace, monospace;
+
+  --color-magenta: #ff0091;
+  --color-coral: #ff5f5f;
+  --color-amber: #ffac00;
+  --color-plum: #2b1b30;
+  --color-canvas: #f6f3f5;
+
+  --color-ink: #52465a;
+  --color-ink-2: #766c7c;
+  --color-ink-3: #a9a1ae;
+  --color-line: #e5e0e6;
+
+  --color-ok: #158039;
+  --color-ok-bg: #e3f4ea;
+  --color-warn: #b45309;
+  --color-warn-bg: #fdf1dc;
+  --color-bad: #c62626;
+  --color-bad-bg: #fdeaea;
+  --color-muted: #5a6782;
+  --color-muted-bg: #eaeef5;
+
+  --radius-chip: 8px;
+  --radius-control: 12px;
+  --radius-card: 16px;
+}
+
+@utility bg-brand {
+  background-image: linear-gradient(90deg, #ff0091, #ffac00);
+}
+
+body {
+  background: var(--color-canvas);
+  color: var(--color-ink);
+}
+
+h1, h2, h3 {
+  color: var(--color-plum);
+  letter-spacing: -0.03em;
+}
