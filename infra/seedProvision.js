@@ -53,7 +53,19 @@ const presets = {
 
 const obsoletePresets = ["fullscan"];
 
+async function waitForNbi(tries = 30) {
+  for (let i = 1; i <= tries; i++) {
+    try {
+      if ((await fetch(`${NBI}/presets?projection=_id`)).ok) return;
+    } catch {}
+    console.log(`waiting for NBI (${i}/${tries})`);
+    await new Promise(r => setTimeout(r, 2000));
+  }
+  throw new Error(`NBI not reachable at ${NBI}`);
+}
+
 (async () => {
+  await waitForNbi();
   for (const name of obsoletePresets) {
     const res = await fetch(`${NBI}/presets/${name}`, { method: "DELETE" });
     console.log(`preset ${name} removed`, res.status);

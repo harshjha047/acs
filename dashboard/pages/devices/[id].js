@@ -61,13 +61,14 @@ export default function DeviceDetail() {
 
   async function refresh() {
     setBusy("refresh");
+    const tid = toast.loading("Asking the device for live values…");
     try {
       const { status } = await api.post(`/devices/${id}/refresh?scope=summary`);
-      toast(status === 202 ? "Queued. Device is not reachable now; values update after its next check-in." : "Live values fetched.", status === 202 ? "warn" : "ok");
+      toast(status === 202 ? "Queued. Device is not reachable now; values update after its next check-in." : "Live values fetched.", status === 202 ? "warn" : "ok", { id: tid });
       await load();
       setVersion(v => v + 1);
     } catch (err) {
-      toast(apiError(err, "Refresh failed"), "bad");
+      toast(apiError(err, "Refresh failed"), "bad", { id: tid });
     } finally {
       setBusy("");
     }
@@ -121,7 +122,7 @@ export default function DeviceDetail() {
                 <Field label="Customer"><CustomerLink device={device} onChange={setDevice} /></Field>
               </dl>
               <div className="flex flex-wrap gap-2">
-                <Button variant="secondary" disabled={!!busy} onClick={refresh}>{busy === "refresh" ? "Fetching..." : "Refresh live"}</Button>
+                <Button variant="secondary" loading={busy === "refresh"} disabled={!!busy} onClick={refresh}>{busy === "refresh" ? "Fetching…" : "Refresh live"}</Button>
                 {(role === "noc" || role === "admin") && <Button variant="danger" disabled={!!busy} onClick={() => setConfirm("reboot")}>Reboot</Button>}
                 {role === "admin" && <Button variant="secondary" disabled={!!busy} onClick={() => setConfirm("remove")}>Remove</Button>}
               </div>
@@ -163,8 +164,8 @@ export default function DeviceDetail() {
         footer={
           <>
             <Button variant="secondary" onClick={closeConfirm}>Cancel</Button>
-            <Button variant="danger" disabled={!!busy || !reason.trim()} onClick={act}>
-              {busy ? "Working..." : confirm === "remove" ? "Remove" : "Reboot"}
+            <Button variant="danger" loading={!!busy} disabled={!reason.trim()} onClick={act}>
+              {confirm === "remove" ? "Remove" : "Reboot"}
             </Button>
           </>
         }

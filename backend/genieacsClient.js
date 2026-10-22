@@ -44,9 +44,14 @@ async function deleteDevice(genieacsDeviceId) {
   return res.status !== 404;
 }
 
+async function getTasks(genieacsDeviceId) {
+  const { data } = await nbi.get("/tasks", { params: { query: JSON.stringify({ device: genieacsDeviceId }) } });
+  return data;
+}
+
 const reboot = id => queueTask(id, { name: "reboot" });
 const refreshObject = (id, objectName, options) => queueTask(id, { name: "refreshObject", objectName }, options);
 const getParameterValues = (id, parameterNames, options) => queueTask(id, { name: "getParameterValues", parameterNames }, options);
 const setParameterValues = (id, parameterValues, options) => queueTask(id, { name: "setParameterValues", parameterValues }, options);
 
-module.exports = { listDevices, deleteDevice, getDevice, queueTask, queueTasks, getFaults, reboot, refreshObject, getParameterValues, setParameterValues };
+module.exports = { listDevices, deleteDevice, getTasks, getDevice, queueTask, queueTasks, getFaults, reboot, refreshObject, getParameterValues, setParameterValues };

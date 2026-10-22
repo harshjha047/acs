@@ -23,6 +23,7 @@ function Status({ poll, queued }) {
 function useDiagnostic(deviceId, kind) {
   const toast = useToast();
   const [queued, setQueued] = useState(false);
+  const [checking, setChecking] = useState(false);
   const fetcher = useCallback(() => api.get(`/devices/${deviceId}/diagnostics/${kind}`).then(r => r.data), [deviceId, kind]);
   const poll = usePoll(fetcher, { interval: 5000, maxMs: 420000, done: finished });
 
@@ -31,19 +32,25 @@ function useDiagnostic(deviceId, kind) {
       poll.setData(null);
       const { status } = await api.post(`/devices/${deviceId}/diagnostics/${kind}`, body);
       setQueued(status === 202);
+      toast(status === 202 ? "Test queued; runs at the device's next check-in." : "Test started on the device.", status === 202 ? "warn" : "ok");
       poll.start();
     } catch (err) {
       toast(apiError(err, "Could not start test"), "bad");
     }
   }
   async function check() {
+    setChecking(true);
     try {
-      poll.setData((await api.get(`/devices/${deviceId}/diagnostics/${kind}?live=1`)).data);
+      const r = (await api.get(`/devices/${deviceId}/diagnostics/${kind}?live=1`)).data;
+      poll.setData(r);
+      if (!finished(r)) toast("No result yet.", "warn", { duration: 2500 });
     } catch (err) {
       toast(apiError(err, "Check failed"), "bad");
+    } finally {
+      setChecking(false);
     }
   }
-  return { poll, queued, run, check };
+  return { poll, queued, checking, run, check };
 }
 
 export default function ToolsPanel({ deviceId }) {
@@ -60,8 +67,8 @@ export default function ToolsPanel({ deviceId }) {
         <div className="flex flex-wrap gap-2">
           <input className={`${input} flex-1`} value={host} onChange={e => setHost(e.target.value)} placeholder="Host or IP" />
           <input className={`${input} w-20`} type="number" min={1} max={10} value={count} onChange={e => setCount(e.target.value)} />
-          <Button disabled={ping.poll.polling} onClick={() => ping.run({ host, count })}>{ping.poll.polling ? "Running..." : "Run ping"}</Button>
-          <Button variant="secondary" onClick={ping.check}>Check result</Button>
+          <Button loading={ping.poll.polling} onClick={() => ping.run({ host, count })}>{ping.poll.polling ? "Running…" : "Run ping"}</Button>
+          <Button variant="secondary" loading={ping.checking} onClick={ping.check}>Check result</Button>
         </div>
         <div className="mt-4"><Status poll={ping.poll} queued={ping.queued} /></div>
         {p?.state === "complete" && !p.stale && (
@@ -78,8 +85,8 @@ export default function ToolsPanel({ deviceId }) {
       <Card title="Speed test from the router">
         <p className="mb-4 text-sm text-ink-2">Downloads a test file from our server to the router (TR-143). Result is capped by the server’s bandwidth; use it to spot clearly low speeds.</p>
         <div className="flex flex-wrap gap-2">
-          <Button disabled={speed.poll.polling} onClick={() => speed.run()}>{speed.poll.polling ? "Testing..." : "Run download test"}</Button>
-          <Button variant="secondary" onClick={speed.check}>Check result</Button>
+          <Button loading={speed.poll.polling} onClick={() => speed.run()}>{speed.poll.polling ? "Testing…" : "Run download test"}</Button>
+          <Button variant="secondary" loading={speed.checking} onClick={speed.check}>Check result</Button>
         </div>
         <div className="mt-4"><Status poll={speed.poll} queued={speed.queued} /></div>
         {s?.state === "complete" && !s.stale && (

@@ -352,7 +352,7 @@ function readiness(doc, s) {
     .filter(([p]) => OPTICAL.rxPower.match.test(p) || OPTICAL.txPower.match.test(p) || /optical|[gex]pon|(^|[._])pon/i.test(p))
     .slice(0, 50).map(([p, n]) => ({ path: p, value: valueOf(n) })) : [];
 
-  return { items, leafCount, vendorExtensions: vendorExt, opticalCandidates };
+  return { items, leafCount, valued, valuedPct, vendorExtensions: vendorExt, opticalCandidates };
 }
 
 module.exports = { summary, wifi, clients, lanPorts, wanConnections, readiness, learnedMap, resolveOptical, toDbm, gradeOptical };

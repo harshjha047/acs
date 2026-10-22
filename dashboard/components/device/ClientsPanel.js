@@ -23,7 +23,7 @@ export default function ClientsPanel({ deviceId }) {
     setBusy(true);
     try {
       const { status } = await api.post(`/devices/${deviceId}/refresh?scope=clients`);
-      if (status === 202) toast("Queued. Device not reachable now; list updates after its next check-in.", "warn");
+      toast(status === 202 ? "Queued. Device not reachable now; list updates after its next check-in." : "Client list updated.", status === 202 ? "warn" : "ok");
       load();
     } catch (err) {
       toast(apiError(err, "Refresh failed"), "bad");
@@ -37,7 +37,7 @@ export default function ClientsPanel({ deviceId }) {
     <div className="grid gap-4">
       <Card
         title={`Connected devices (${rows.filter(c => c.active !== false).length} active / ${rows.length})`}
-        action={<Button variant="secondary" disabled={busy} onClick={refresh}>{busy ? "Fetching..." : "Fetch live list"}</Button>}
+        action={<Button variant="secondary" loading={busy} onClick={refresh}>{busy ? "Fetching…" : "Fetch live list"}</Button>}
       >
         {error && <p className="text-sm font-semibold text-bad">{error}</p>}
         {!data && !error && <p className="text-sm">Loading...</p>}

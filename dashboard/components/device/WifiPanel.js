@@ -47,7 +47,7 @@ function EditWifi({ deviceId, radio, onClose, onSaved }) {
       open
       onClose={onClose}
       title={`Edit ${radio.band || "Wi-Fi"} · ${radio.ssid || radio.id.split(".").slice(-1)}`}
-      footer={<><Button variant="secondary" onClick={onClose}>Cancel</Button><Button disabled={busy} onClick={save}>{busy ? "Saving..." : "Save to device"}</Button></>}
+      footer={<><Button variant="secondary" onClick={onClose}>Cancel</Button><Button loading={busy} onClick={save}>{busy ? "Saving…" : "Save to device"}</Button></>}
     >
       <div className="flex flex-col gap-3">
         <label className="text-xs font-semibold">Network name (SSID)

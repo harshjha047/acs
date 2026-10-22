@@ -199,7 +199,11 @@ router.post("/:id/refresh", async (req, res) => {
   const details = await audit(req, "refresh", async () => {
     let outcome;
     if (scope === "full") {
-      ({ outcome } = await genie.refreshObject(id, root, { timeout: 120000 }));
+      const names = leaves(doc[root], root).map(([path]) => path);
+      ({ outcome } = await genie.queueTasks(id, [
+        { name: "refreshObject", objectName: root },
+        ...(names.length ? [{ name: "getParameterValues", parameterNames: names }] : [])
+      ], { timeout: 120000 }));
     } else {
       const objects = ROOTS[root].refresh[scope].filter(p => get(doc, p) !== undefined);
       ({ outcome } = await genie.queueTasks(id, (objects.length ? objects : [root]).map(objectName => ({ name: "refreshObject", objectName })), { timeout: 30000 }));
@@ -276,7 +280,13 @@ router.get("/:id/diagnostics/speed", async (req, res) => res.json(await readDiag
 router.get("/:id/readiness", async (req, res) => {
   const doc = await loadTree(req);
   const { summary, profile } = await buildSummary(req, doc);
-  res.json({ ...view.readiness(doc, summary), profile: profile ? { verified: profile.verifiedOnRealDevice, parameterMap: profile.parameterMap, units: profile.units } : null });
+  const tasks = await genie.getTasks(req.device.genieacsDeviceId).catch(() => []);
+  res.json({
+    ...view.readiness(doc, summary),
+    lastInform: summary.lastInform, interval: summary.online.interval,
+    pendingTasks: tasks.map(t => ({ name: t.name, timestamp: t.timestamp })),
+    profile: profile ? { verified: profile.verifiedOnRealDevice, parameterMap: profile.parameterMap, units: profile.units } : null
+  });
 });
 
 router.get("/:id/capture", async (req, res) => {
