@@ -38,6 +38,7 @@ for (const b of bases) declare(b + ".*", {value: now});
 };
 
 const presets = {
+  inform: { channel: "inform", weight: 0, events: { "0 BOOTSTRAP": true, "1 BOOT": true }, precondition: "", configurations: [{ type: "provision", name: "inform", args: null }] },
   "fullscan-bootstrap": { channel: "fullscan", weight: 100, events: { "0 BOOTSTRAP": true }, precondition: "", configurations: [{ type: "provision", name: "fullscan", args: null }] },
   refresh: { channel: "default", weight: 0, events: { "2 PERIODIC": true }, precondition: "", configurations: [{ type: "provision", name: "refresh", args: null }] },
   diagnostics: { channel: "diagnostics", weight: 0, events: { "8 DIAGNOSTICS COMPLETE": true }, precondition: "", configurations: [{ type: "provision", name: "diagnostics", args: null }] }

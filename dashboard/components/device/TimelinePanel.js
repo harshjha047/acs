@@ -18,7 +18,8 @@ function describe(e) {
   if (e.type === "fault") return `Device fault ${e.code}: ${e.detail || e.message}`;
   const d = e.details || {};
   if (e.action === "wifi_update") return (d.changes || []).map(([p, v]) => `${p.split(".").slice(-2).join(".")} → ${v}`).join(", ");
-  if (e.action === "ping") return `${d.host} ×${d.count}`;
+  if (e.action === "ping") return `${d.host} ×${d.count}${d.testState ? ` · ${d.testRawState || d.testState}` : ""}`;
+  if (e.action === "speed_test" && d.testState) return d.testRawState || d.testState;
   if (e.action === "refresh") return d.scope;
   if (d.reason) return d.reason;
   return e.error || "";

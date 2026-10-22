@@ -37,7 +37,11 @@ function useDiagnostic(deviceId, kind) {
     }
   }
   async function check() {
-    try { poll.setData(await fetcher()); } catch (err) { toast(apiError(err, "Check failed"), "bad"); }
+    try {
+      poll.setData((await api.get(`/devices/${deviceId}/diagnostics/${kind}?live=1`)).data);
+    } catch (err) {
+      toast(apiError(err, "Check failed"), "bad");
+    }
   }
   return { poll, queued, run, check };
 }

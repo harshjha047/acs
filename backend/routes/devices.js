@@ -199,11 +199,7 @@ router.post("/:id/refresh", async (req, res) => {
   const details = await audit(req, "refresh", async () => {
     let outcome;
     if (scope === "full") {
-      const names = leaves(doc[root], root).map(([path]) => path);
-      ({ outcome } = await genie.queueTasks(id, [
-        { name: "refreshObject", objectName: root },
-        { name: "getParameterValues", parameterNames: names }
-      ], { timeout: 120000 }));
+      ({ outcome } = await genie.refreshObject(id, root, { timeout: 120000 }));
     } else {
       const objects = ROOTS[root].refresh[scope].filter(p => get(doc, p) !== undefined);
       ({ outcome } = await genie.queueTasks(id, (objects.length ? objects : [root]).map(objectName => ({ name: "refreshObject", objectName })), { timeout: 30000 }));
@@ -223,18 +219,33 @@ async function startDiagnostic(req, kind, args) {
   });
 }
 
+const TERMINAL = ["complete", "error"];
+
 async function readDiagnostic(req, kind) {
-  const doc = await loadTree(req);
+  let doc = await loadTree(req);
   const action = kind === "ping" ? "ping" : "speed_test";
   const last = await AuditLog.findOne({ device: req.device._id, action }).sort({ timestamp: -1 });
   const taskId = last?.details?.taskId;
   const faults = taskId ? await genie.getFaults(req.device.genieacsDeviceId).catch(() => []) : [];
   const fault = faults.find(f => f._id === `${req.device.genieacsDeviceId}:task_${taskId}`);
-  const result = diag.read(doc, kind);
-  const fresh = result.checkedAt && last && new Date(result.checkedAt) >= last.timestamp;
-  if (last?.result === "pending" && (fault || (fresh && ["complete", "error"].includes(result.state)))) {
-    last.result = fault || result.state === "error" ? "failed" : "success";
+  const isFresh = r => !!(r.checkedAt && last && new Date(r.checkedAt) >= last.timestamp);
+  let result = diag.read(doc, kind);
+
+  if (req.query.live && last && !fault && !(isFresh(result) && TERMINAL.includes(result.state))) {
+    const paths = diag.resultPaths(doc, kind);
+    if (paths.length) {
+      const { outcome } = await genie.getParameterValues(req.device.genieacsDeviceId, paths, { timeout: 8000 }).catch(() => ({}));
+      if (outcome === "success") result = diag.read((doc = await loadTree(req)), kind);
+    }
+  }
+
+  const fresh = isFresh(result);
+  if (last && !last.details?.testState && (fault || (fresh && TERMINAL.includes(result.state)))) {
+    const failed = !!fault || result.state === "error";
+    last.result = failed ? "failed" : "success";
+    last.details = { ...last.details, testState: fault ? "fault" : result.state, testRawState: result.rawState };
     if (fault) last.errorMessage = fault.detail || fault.message;
+    else if (failed) last.errorMessage = result.rawState;
     await last.save();
   }
   return {
