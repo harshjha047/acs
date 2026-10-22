@@ -8,7 +8,12 @@
 		file_server
 	}
 	handle {
-		reverse_proxy genieacs-cwmp:7547
+		reverse_proxy genieacs-cwmp:7547 {
+			header_up Forwarded "for=\"{remote_host}\";proto={scheme}"
+			transport http {
+				keepalive off
+			}
+		}
 	}
 }
 

@@ -5,7 +5,7 @@ const AuditLogSchema = new Schema({
   device: { type: Schema.Types.ObjectId, ref: "Device", required: true },
   action: {
     type: String,
-    enum: ["diagnostics_view", "reboot", "factory_reset", "wifi_update", "firmware_push", "auto_provision", "refresh", "ping", "speed_test", "capture", "customer_link"],
+    enum: ["diagnostics_view", "reboot", "factory_reset", "wifi_update", "firmware_push", "auto_provision", "refresh", "ping", "speed_test", "capture", "customer_link", "device_remove"],
     required: true
   },
   details: { type: Schema.Types.Mixed },

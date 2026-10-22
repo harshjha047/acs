@@ -4,7 +4,8 @@ One compose project (`acs`) for both the VPS and local dev.
 
 | Service | Exposure |
 |---|---|
-| genieacs-cwmp | `7547` public, and via Caddy on `ACS_DOMAIN` (80/443) |
+| genieacs-cwmp | `7547` public (preferred CWMP path), and via Caddy on `ACS_DOMAIN` (80/443) |
+| cpe-sim | profile `sim`; genieacs-sim using the ACS credentials |
 | genieacs-nbi / fs / ui, mongo | `127.0.0.1` only |
 | api, dashboard, caddy | profile `prod`; Caddy serves `API_DOMAIN` (`/api/*` → api, rest → dashboard) |
 
@@ -50,7 +51,7 @@ After this works, delete the old `/opt/acs/docker-compose.yml`, `Caddyfile` and 
     cd ../backend && cp .env.example .env && npm i && npm run seed && npm run dev
     cd ../dashboard && NEXT_PUBLIC_API_URL=http://localhost:4000/api npm run dev
 
-Simulator: `git clone https://github.com/genieacs/genieacs-sim && cd genieacs-sim && npm i && node genieacs-sim -u http://127.0.0.1:7547/ -s 1`
+Simulator: add `sim` to `COMPOSE_PROFILES` (e.g. `COMPOSE_PROFILES=sim`).
 
 ## One-time extras (VPS)
 
@@ -61,3 +62,34 @@ Simulator: `git clone https://github.com/genieacs/genieacs-sim && cd genieacs-si
 
 - `speedtest/50MB.bin`: file the router downloads for the TR-143 speed test (`http://ACS_DOMAIN/speedtest/50MB.bin`).
 - `seedProvision.js`: installs provisions/presets `refresh` (light refresh every periodic inform) and `diagnostics` (fetches ping/speed results on `8 DIAGNOSTICS COMPLETE`).
+
+## ACS authentication (`cwmp.auth`)
+
+Every CPE must send `CWMP_USER` / `CWMP_PASS` (set in `.env`). Devices without them are rejected before they are registered.
+
+    docker rm -f cpe-sim                                   # old hand-run simulator
+    # .env: COMPOSE_PROFILES=prod,sim  + CWMP_USER / CWMP_PASS (alphanumeric, 16+)
+    docker compose up -d --build
+    docker compose exec api node scripts/setCwmpAuth.js
+    docker compose restart genieacs-cwmp
+    docker compose logs --since 10m genieacs-cwmp | grep -iE "auth|inform" | tail
+
+Rollback: `docker compose exec api node scripts/setCwmpAuth.js --off && docker compose restart genieacs-cwmp`
+
+CPE ACS URL, in order of preference:
+
+| URL | Auth | Notes |
+|---|---|---|
+| `https://acs.thediv.in/` | Basic over TLS | needs CPE TLS support |
+| `http://acs.thediv.in:7547/` | Digest | direct to GenieACS |
+| `http://acs.thediv.in/` | — | via Caddy over plain HTTP; Digest nonces are bound to the TCP connection, so auth fails here. Avoid once `cwmp.auth` is on |
+
+## Backups
+
+    sudo mkdir -p /opt/acs/backups && sudo chown deploy /opt/acs/backups
+    ./backup.sh
+    crontab -e   # 30 2 * * * /opt/acs/repo/infra/backup.sh >> /opt/acs/backups/backup.log 2>&1
+
+Off-box: set `BACKUP_RSYNC_TARGET=user@host:/path/` (key-based SSH). Restore:
+
+    docker compose exec -T mongo mongorestore --archive --gzip --drop -u "$MONGO_USER" -p "$MONGO_PASS" --authenticationDatabase admin < /opt/acs/backups/<file>

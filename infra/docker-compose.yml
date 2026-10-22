@@ -1,13 +1,21 @@
 name: acs
 
+x-logging: &logging
+  driver: json-file
+  options:
+    max-size: 10m
+    max-file: "5"
+
 x-genieacs: &genieacs
   image: acs/genieacs:1.2.16
   build: ./genieacs
   restart: unless-stopped
+  logging: *logging
   environment:
     GENIEACS_MONGODB_CONNECTION_URL: mongodb://${MONGO_USER}:${MONGO_PASS}@mongo:27017/genieacs?authSource=admin
     GENIEACS_EXT_DIR: /opt/genieacs/ext
     GENIEACS_UI_JWT_SECRET: ${GENIEACS_UI_JWT_SECRET}
+    GENIEACS_FORWARDED_HEADER: 172.16.0.0/12
   volumes:
     - ./ext:/opt/genieacs/ext:ro
   depends_on:
@@ -18,6 +26,7 @@ services:
   mongo:
     image: mongo:8.0
     restart: unless-stopped
+    logging: *logging
     command: ["--wiredTigerCacheSizeGB", "2"]
     environment:
       MONGO_INITDB_ROOT_USERNAME: ${MONGO_USER}
@@ -56,6 +65,7 @@ services:
     build: ../backend
     image: acs/api
     restart: unless-stopped
+    logging: *logging
     environment:
       MONGO_URI: mongodb://${MONGO_USER}:${MONGO_PASS}@mongo:27017/acs_app?authSource=admin
       GENIEACS_NBI_URL: http://genieacs-nbi:7557
@@ -64,6 +74,8 @@ services:
       ADMIN_EMAIL: ${ADMIN_EMAIL}
       ADMIN_PASSWORD: ${ADMIN_PASSWORD}
       SPEEDTEST_URL: http://${ACS_DOMAIN}/speedtest/50MB.bin
+      CWMP_USER: ${CWMP_USER:-}
+      CWMP_PASS: ${CWMP_PASS:-}
     depends_on:
       mongo:
         condition: service_healthy
@@ -75,12 +87,14 @@ services:
     build: ../dashboard
     image: acs/dashboard
     restart: unless-stopped
+    logging: *logging
     depends_on: [api]
 
   caddy:
     profiles: [prod]
     image: caddy:2-alpine
     restart: unless-stopped
+    logging: *logging
     ports: ["80:80", "443:443"]
     environment:
       API_DOMAIN: ${API_DOMAIN}
@@ -92,6 +106,19 @@ services:
       - caddy-data:/data
       - caddy-config:/config
     depends_on: [api, dashboard, genieacs-cwmp]
+
+  cpe-sim:
+    profiles: [sim]
+    build: ./sim
+    image: acs/cpe-sim
+    restart: unless-stopped
+    logging: *logging
+    environment:
+      ACS_URL: http://genieacs-cwmp:7547/
+      SERIAL_OFFSET: ${SIM_SERIAL_OFFSET:-1}
+      CWMP_USER: ${CWMP_USER:-}
+      CWMP_PASS: ${CWMP_PASS:-}
+    depends_on: [genieacs-cwmp]
 
 volumes:
   mongo-data:

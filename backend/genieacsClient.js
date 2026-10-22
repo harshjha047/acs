@@ -38,9 +38,15 @@ async function getFaults(genieacsDeviceId) {
   return data;
 }
 
+async function deleteDevice(genieacsDeviceId) {
+  const res = await nbi.delete(`/devices/${encodeURIComponent(genieacsDeviceId)}`, { validateStatus: s => s < 500 });
+  if (res.status >= 400 && res.status !== 404) throw Object.assign(new Error(`NBI ${res.status}`), { status: res.status });
+  return res.status !== 404;
+}
+
 const reboot = id => queueTask(id, { name: "reboot" });
 const refreshObject = (id, objectName, options) => queueTask(id, { name: "refreshObject", objectName }, options);
 const getParameterValues = (id, parameterNames, options) => queueTask(id, { name: "getParameterValues", parameterNames }, options);
 const setParameterValues = (id, parameterValues, options) => queueTask(id, { name: "setParameterValues", parameterValues }, options);
 
-module.exports = { listDevices, getDevice, queueTask, queueTasks, getFaults, reboot, refreshObject, getParameterValues, setParameterValues };
+module.exports = { listDevices, deleteDevice, getDevice, queueTask, queueTasks, getFaults, reboot, refreshObject, getParameterValues, setParameterValues };

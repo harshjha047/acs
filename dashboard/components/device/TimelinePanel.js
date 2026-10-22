@@ -7,7 +7,7 @@ import Button from "../ui/Button";
 import { useToast } from "../ui/Toast";
 
 const ACTION = {
-  diagnostics_view: "Viewed diagnostics", reboot: "Reboot", factory_reset: "Factory reset", wifi_update: "Wi-Fi change", firmware_push: "Firmware push",
+  diagnostics_view: "Viewed diagnostics", reboot: "Reboot", factory_reset: "Factory reset", wifi_update: "Wi-Fi change", firmware_push: "Firmware push", device_remove: "Removed from ACS",
   auto_provision: "Auto-provision", refresh: "Refresh", ping: "Ping test", speed_test: "Speed test", capture: "Capture", customer_link: "Customer linked"
 };
 const RESULT = { success: "ok", failed: "bad", pending: "warn" };
@@ -20,6 +20,7 @@ function describe(e) {
   if (e.action === "wifi_update") return (d.changes || []).map(([p, v]) => `${p.split(".").slice(-2).join(".")} → ${v}`).join(", ");
   if (e.action === "ping") return `${d.host} ×${d.count}`;
   if (e.action === "refresh") return d.scope;
+  if (d.reason) return d.reason;
   return e.error || "";
 }
 

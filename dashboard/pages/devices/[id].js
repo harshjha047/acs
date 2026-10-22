@@ -37,8 +37,12 @@ export default function DeviceDetail() {
   const [error, setError] = useState("");
   const [tab, setTab] = useState("overview");
   const [busy, setBusy] = useState("");
-  const [confirmOpen, setConfirmOpen] = useState(false);
+  const [confirm, setConfirm] = useState(null);
+  const [reason, setReason] = useState("");
   const [version, setVersion] = useState(0);
+  const [role, setRole] = useState(null);
+
+  useEffect(() => { setRole(JSON.parse(localStorage.getItem("user") || "null")?.role || null); }, []);
 
   const load = useCallback(async () => {
     if (!id) return;
@@ -69,17 +73,29 @@ export default function DeviceDetail() {
     }
   }
 
-  async function reboot() {
-    setBusy("reboot");
+  async function act() {
+    const kind = confirm;
+    setBusy(kind);
     try {
-      const { status } = await api.post(`/devices/${id}/reboot`);
-      toast(status === 202 ? "Reboot queued; runs when the device next checks in." : "Reboot sent. Device will be offline for 1-3 minutes.", status === 202 ? "warn" : "ok");
+      if (kind === "reboot") {
+        const { status } = await api.post(`/devices/${id}/reboot`, { reason });
+        toast(status === 202 ? "Reboot queued; runs when the device next checks in." : "Reboot sent. Device will be offline for 1-3 minutes.", status === 202 ? "warn" : "ok");
+      } else {
+        await api.delete(`/devices/${id}`, { data: { reason } });
+        toast("Device removed.", "ok");
+        router.replace("/devices");
+      }
+      closeConfirm();
     } catch (err) {
-      toast(apiError(err, "Reboot failed"), "bad");
+      toast(apiError(err, `${kind === "reboot" ? "Reboot" : "Remove"} failed`), "bad");
     } finally {
       setBusy("");
-      setConfirmOpen(false);
     }
+  }
+
+  function closeConfirm() {
+    setConfirm(null);
+    setReason("");
   }
 
   const online = summary?.online.state;
@@ -106,7 +122,8 @@ export default function DeviceDetail() {
               </dl>
               <div className="flex flex-wrap gap-2">
                 <Button variant="secondary" disabled={!!busy} onClick={refresh}>{busy === "refresh" ? "Fetching..." : "Refresh live"}</Button>
-                <Button variant="danger" disabled={!!busy} onClick={() => setConfirmOpen(true)}>Reboot</Button>
+                {(role === "noc" || role === "admin") && <Button variant="danger" disabled={!!busy} onClick={() => setConfirm("reboot")}>Reboot</Button>}
+                {role === "admin" && <Button variant="secondary" disabled={!!busy} onClick={() => setConfirm("remove")}>Remove</Button>}
               </div>
             </div>
           </Card>
@@ -140,17 +157,31 @@ export default function DeviceDetail() {
       )}
 
       <Modal
-        open={confirmOpen}
-        onClose={() => setConfirmOpen(false)}
-        title="Reboot this device?"
+        open={!!confirm}
+        onClose={closeConfirm}
+        title={confirm === "remove" ? "Remove this device?" : "Reboot this device?"}
         footer={
           <>
-            <Button variant="secondary" onClick={() => setConfirmOpen(false)}>Cancel</Button>
-            <Button variant="danger" disabled={busy === "reboot"} onClick={reboot}>{busy === "reboot" ? "Rebooting..." : "Reboot"}</Button>
+            <Button variant="secondary" onClick={closeConfirm}>Cancel</Button>
+            <Button variant="danger" disabled={!!busy || !reason.trim()} onClick={act}>
+              {busy ? "Working..." : confirm === "remove" ? "Remove" : "Reboot"}
+            </Button>
           </>
         }
       >
-        The customer’s internet and Wi-Fi will drop for 1-3 minutes.
+        <p>
+          {confirm === "remove"
+            ? "Deletes it from the ACS. History is kept. A device with valid ACS credentials will reappear on its next check-in."
+            : "The customer’s internet and Wi-Fi will drop for 1-3 minutes."}
+        </p>
+        <textarea
+          className="mt-4 w-full rounded-control border border-line bg-white p-3 text-sm outline-none focus:border-plum"
+          rows={3}
+          maxLength={500}
+          placeholder="Reason (required, saved to history)"
+          value={reason}
+          onChange={e => setReason(e.target.value)}
+        />
       </Modal>
     </Shell>
   );

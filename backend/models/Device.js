@@ -19,7 +19,8 @@ const DeviceSchema = new Schema({
   rxPower: { type: Number },
   rxGrade: { type: String },
   informInterval: { type: Number },
-  lastSummaryAt: { type: Date }
+  lastSummaryAt: { type: Date },
+  removedAt: { type: Date, index: true }
 }, { timestamps: true });
 
 DeviceSchema.index({ serialNumber: 1 });

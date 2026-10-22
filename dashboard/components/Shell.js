@@ -1,11 +1,12 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/router";
-import { Router as RouterIcon, ScrollText, LogOut } from "lucide-react";
+import { Router as RouterIcon, ScrollText, Users, LogOut } from "lucide-react";
 
 const nav = [
   { href: "/devices", label: "Devices", icon: RouterIcon },
-  { href: "/audit", label: "Audit log", icon: ScrollText }
+  { href: "/audit", label: "Audit log", icon: ScrollText },
+  { href: "/users", label: "Users", icon: Users, roles: ["admin"] }
 ];
 
 export default function Shell({ title, children }) {
@@ -31,7 +32,7 @@ export default function Shell({ title, children }) {
       <aside className="sticky top-0 flex h-screen w-[72px] flex-col items-center bg-plum py-5">
         <div className="bg-brand bg-clip-text text-lg font-extrabold tracking-tight text-transparent">DIV</div>
         <nav className="mt-10 flex flex-1 flex-col gap-2">
-          {nav.map(({ href, label, icon: Icon }) => {
+          {nav.filter(n => !n.roles || n.roles.includes(user?.role)).map(({ href, label, icon: Icon }) => {
             const active = router.pathname.startsWith(href);
             return (
               <Link

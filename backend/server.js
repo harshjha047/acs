@@ -20,6 +20,7 @@ app.use("/api/devices", require("./routes/devices"));
 app.use("/api/audit", require("./routes/audit"));
 app.use("/api/customers", require("./routes/customers"));
 app.use("/api/profiles", require("./routes/profiles"));
+app.use("/api/users", require("./routes/users"));
 
 app.use((req, res) => res.status(404).json({ error: "Not found" }));
 

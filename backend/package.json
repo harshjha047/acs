@@ -6,7 +6,8 @@
   "scripts": {
     "dev": "nodemon server.js",
     "start": "node server.js",
-    "seed": "node scripts/seedAdmin.js"
+    "seed": "node scripts/seedAdmin.js",
+    "test": "node --test \"test/**/*.test.js\""
   },
   "dependencies": {
     "axios": "^1.7.0",

@@ -16,8 +16,8 @@ Goal: in one short session with a real ONT, prove Phase 1 (connect → diagnose 
 | Field | Value |
 |---|---|
 | TR-069 enable | On |
-| ACS URL | `http://acs.thediv.in/` (fallback `http://154.49.142.251:7547/`) |
-| ACS username / password | blank |
+| ACS URL | `http://acs.thediv.in:7547/` (or `https://acs.thediv.in/` if the ONT supports TLS) |
+| ACS username / password | `CWMP_USER` / `CWMP_PASS` from `infra/.env` |
 | Periodic inform | On, **60 s** for the session (set back to 300 after) |
 | Connection request user / password | `acs` / `acs12345` |
 | WAN binding for TR-069 | the **INTERNET** WAN, or `TR069_INTERNET` |
@@ -42,6 +42,7 @@ Goal: in one short session with a real ONT, prove Phase 1 (connect → diagnose 
 | Symptom | Check |
 |---|---|
 | No Inform in cwmp logs | WAN binding / VLAN; ONT can reach internet? Try IP URL; `curl http://acs.thediv.in/` from a phone on the ONT Wi-Fi should return 405 |
+| cwmp logs show `401` / auth failure | Re-type ACS username/password on the ONT; try the `:7547` URL (Digest does not work through plain-HTTP Caddy). Last resort for the session: `setCwmpAuth.js --off` + restart cwmp, then turn it back on |
 | Device listed but actions say "queued" | Connection request blocked (ONT behind NAT/CGNAT). Expected; actions run at next inform (60 s during session) |
 | Rx power missing | Readiness → "Optical / PON parameters found" table: screenshot it |
 | Rx power value wrong | Note raw value and ONT UI value; fix later with profile `units` |

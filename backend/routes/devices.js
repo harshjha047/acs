@@ -6,7 +6,7 @@ const DeviceNote = require("../models/DeviceNote");
 const DeviceProfile = require("../models/DeviceProfile");
 const Customer = require("../models/Customer");
 const AuditLog = require("../models/AuditLog");
-const { requireAuth } = require("../middleware/auth");
+const { requireAuth, requireRole } = require("../middleware/auth");
 const { rootOf, leaves, get, valueOf } = require("../lib/tree");
 const { ROOTS } = require("../lib/catalog");
 const view = require("../lib/deviceView");
@@ -101,23 +101,28 @@ router.get("/", async (req, res) => {
               productClass: id._ProductClass || "unknown",
               oui: id._OUI || "unknown"
             },
-            ...(d._lastInform && { $set: { lastInformAt: new Date(d._lastInform) } })
+            ...(d._lastInform && { $set: { lastInformAt: new Date(d._lastInform) } }),
+            $unset: { removedAt: "" }
           },
           upsert: true
         }
       };
     }), { ordered: false });
   }
+  await Device.updateMany(
+    { genieacsDeviceId: { $nin: genieDevices.map(d => d._id) }, removedAt: null },
+    { $set: { removedAt: new Date() } }
+  );
 
   const q = String(req.query.q || "").trim().slice(0, 100);
-  let filter = {};
+  const filter = { removedAt: null };
   if (q) {
     const re = new RegExp(escapeRe(q), "i");
     const customers = await Customer.find({ $or: [{ name: re }, { phone: re }, { accountId: re }, { email: re }] }, "_id").limit(50).lean();
-    filter = { $or: [
+    filter.$or = [
       { serialNumber: re }, { genieacsDeviceId: re }, { pppoeUsername: re }, { macAddress: re }, { wanIp: re },
       ...(customers.length ? [{ customer: { $in: customers.map(c => c._id) } }] : [])
-    ] };
+    ];
   }
   res.json(await Device.find(filter).populate("customer", "name phone accountId").sort({ lastInformAt: -1 }).limit(500).lean());
 });
@@ -305,12 +310,27 @@ router.get("/:id/diagnostics", async (req, res) => {
   res.json(details);
 });
 
-router.post("/:id/reboot", async (req, res) => {
+const reasonOf = req => String(req.body?.reason || "").trim().slice(0, 500);
+
+router.post("/:id/reboot", requireRole("noc", "admin"), async (req, res) => {
+  const reason = reasonOf(req);
+  if (!reason) return res.status(400).json({ error: "Reason is required" });
   const details = await audit(req, "reboot", async () => {
-    const { outcome, reason, task } = await genie.reboot(req.device.genieacsDeviceId);
-    return { result: outcome, details: { outcome, reason, taskId: task?._id } };
+    const { outcome, reason: nbiReason, task } = await genie.reboot(req.device.genieacsDeviceId);
+    return { result: outcome, details: { outcome, reason, nbiReason, taskId: task?._id } };
   });
   res.status(statusFor(details.outcome)).json(details);
+});
+
+router.delete("/:id", requireRole("admin"), async (req, res) => {
+  const reason = reasonOf(req);
+  if (!reason) return res.status(400).json({ error: "Reason is required" });
+  const details = await audit(req, "device_remove", async () => {
+    const existed = await genie.deleteDevice(req.device.genieacsDeviceId);
+    await Device.updateOne({ _id: req.device._id }, { $set: { removedAt: new Date(), status: "decommissioned" } });
+    return { details: { reason, genieacsDeviceId: req.device.genieacsDeviceId, existedInGenieacs: existed } };
+  });
+  res.json(details);
 });
 
 router.get("/:id/faults", async (req, res) => {
