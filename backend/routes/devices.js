@@ -21,7 +21,7 @@ router.param("id", async (req, res, next, id) => {
   next();
 });
 
-const SENSITIVE = /password|passphrase|presharedkey|wepkey|secret/i;
+const { isSensitive, mask } = require("../lib/sensitive");
 const DEVICE_ID_PROJECTION = ["_deviceId", "_lastInform"];
 const HOST_RE = /^(?=.{1,253}$)(([a-z0-9-]{1,63}\.)*[a-z0-9-]{1,63}|\d{1,3}(\.\d{1,3}){3}|[0-9a-f:]+)$/i;
 const escapeRe = s => s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
@@ -182,7 +182,7 @@ router.put("/:id/wifi", async (req, res) => {
       result: outcome,
       details: {
         outcome, taskId: task?._id, interface: radio.id,
-        changes: values.map(([p, v]) => [p, SENSITIVE.test(p) ? "(changed)" : v]),
+        changes: values.map(([p, v]) => [p, isSensitive(p, v) ? "(changed)" : v]),
         before: { ssid: radio.ssid, enabled: radio.enabled, channel: radio.channel, hidden: radio.hidden }
       }
     };
@@ -285,12 +285,12 @@ router.get("/:id/readiness", async (req, res) => {
   });
 });
 
-router.get("/:id/capture", async (req, res) => {
+router.get("/:id/capture", requireRole("noc", "admin"), async (req, res) => {
   const doc = await loadTree(req);
   const { summary } = await buildSummary(req, doc);
   const root = rootOf(doc);
   const parameters = root ? leaves(doc[root], root).map(([path, n]) => ({
-    path, value: SENSITIVE.test(path) && n._value ? "(hidden)" : n._value ?? null, type: n._type ?? null, writable: !!n._writable
+    path, value: mask(path, n._value), type: n._type ?? null, writable: !!n._writable
   })) : [];
   const faults = await genie.getFaults(req.device.genieacsDeviceId).catch(() => []);
   await AuditLog.create({ user: req.user.id, device: req.device._id, action: "capture", result: "success", details: { parameters: parameters.length } });
@@ -309,7 +309,7 @@ router.get("/:id/parameters", async (req, res) => {
   const root = rootOf(doc);
   const parameters = root ? leaves(doc[root], root).map(([path, n]) => ({
     path,
-    value: SENSITIVE.test(path) && n._value ? "(hidden)" : n._value ?? null,
+    value: mask(path, n._value),
     type: n._type ?? null,
     writable: !!n._writable,
     timestamp: n._timestamp ?? null
