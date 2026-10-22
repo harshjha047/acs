@@ -39,6 +39,13 @@ const OPTICAL = {
   }
 };
 
+const OPTICAL_MODULE = [
+  `${IGD}.WANDevice.*.X_CT-COM_EponInterfaceConfig`,
+  `${IGD}.WANDevice.*.X_CT-COM_GponInterfaceConfig`,
+  `${IGD}.WANDevice.*.X_CU_WANEPONInterfaceConfig`,
+  `${IGD}.WANDevice.*.X_CU_WANGPONInterfaceConfig.OpticalTransceiver`
+];
+
 const ROOTS = {
   [IGD]: {
     wanConnections: [`${IGD}.WANDevice.*.WANConnectionDevice.*.WANPPPConnection.*`, `${IGD}.WANDevice.*.WANConnectionDevice.*.WANIPConnection.*`],
@@ -69,4 +76,4 @@ const ROOTS = {
   }
 };
 
-module.exports = { SCALARS, OPTICAL, ROOTS };
+module.exports = { SCALARS, OPTICAL, OPTICAL_MODULE, ROOTS };

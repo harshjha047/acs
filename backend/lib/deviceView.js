@@ -1,5 +1,5 @@
 const { childKeys, get, valueOf, rootOf, expand, leaves, fields } = require("./tree");
-const { SCALARS, OPTICAL, ROOTS } = require("./catalog");
+const { SCALARS, OPTICAL, OPTICAL_MODULE, ROOTS } = require("./catalog");
 
 const IGD = "InternetGatewayDevice";
 const meaningful = v => v !== null && v !== undefined && v !== "" && v !== "0.0.0.0";
@@ -60,6 +60,36 @@ function resolveOptical(doc, key, profile = {}) {
   return { path, source, raw, ...conv, grade: gradeOptical(key, conv.dbm) };
 }
 
+const num = v => (v === null || v === undefined || v === "" || !Number.isFinite(Number(v)) ? null : Number(v));
+const round = (v, d) => (v === null ? null : Math.round(v * 10 ** d) / 10 ** d);
+
+function opticalModule(doc) {
+  const hit = OPTICAL_MODULE.flatMap(p => expand(doc, p)).find(([, n]) => n?.TransceiverTemperature || n?.BiasCurrent);
+  if (!hit) return null;
+  const [path, n] = hit;
+  const voltKey = firstKey(n, /^Supply(Voltage|Vottage)$/i);
+  const temp = num(valueOf(n.TransceiverTemperature));
+  const volt = voltKey ? num(valueOf(n[voltKey])) : null;
+  const bias = num(valueOf(n.BiasCurrent));
+  return {
+    path,
+    temperatureC: temp === null ? null : round(temp > 200 ? temp / 256 : temp, 1),
+    voltageV: volt === null ? null : round(volt > 100 ? volt / 10000 : volt, 2),
+    biasMa: bias === null ? null : round(bias > 200 ? bias * 0.002 : bias, 2),
+    status: valueOf(n.Status),
+    fecErrors: num(valueOf(n.Stats?.FECError)),
+    hecErrors: num(valueOf(n.Stats?.HECError))
+  };
+}
+
+function system(doc) {
+  const root = rootOf(doc);
+  if (!root) return null;
+  const mem = get(doc, `${root}.DeviceInfo.MemoryStatus`);
+  const proc = get(doc, `${root}.DeviceInfo.ProcessStatus`);
+  return { memTotalKb: num(valueOf(mem?.Total)), memFreeKb: num(valueOf(mem?.Free)), cpuPct: num(valueOf(proc?.CPUUsage)) };
+}
+
 const isUp = s => ["connected", "up"].includes(lower(s));
 
 function wanConnections(doc) {
@@ -67,10 +97,14 @@ function wanConnections(doc) {
   if (root === IGD) {
     return ROOTS[IGD].wanConnections.flatMap(pattern => expand(doc, pattern).map(([path, node]) => {
       const serviceKey = firstKey(node, /servicelist/i);
+      const v6Key = firstKey(node, /IPv6IPAddress$/);
+      const v6PrefixKey = firstKey(node, /IPv6Prefix$/);
       return {
         path,
         kind: path.includes("WANPPPConnection") ? "PPPoE" : "IP",
-        ...fields(node, ["Name", "Enable", "ConnectionType", "ConnectionStatus", "ExternalIPAddress", "Username", "LastConnectionError", "MACAddress", "Uptime", "DefaultGateway", "DNSServers"]),
+        ...fields(node, ["Name", "Enable", "ConnectionType", "ConnectionStatus", "ExternalIPAddress", "Username", "LastConnectionError", "MACAddress", "Uptime", "DefaultGateway", "RemoteIPAddress", "DNSServers"]),
+        ipv6: v6Key ? valueOf(node[v6Key]) || null : null,
+        ipv6Prefix: v6PrefixKey ? valueOf(node[v6PrefixKey]) || null : null,
         services: serviceKey ? valueOf(node[serviceKey]) : null
       };
     }));
@@ -133,6 +167,7 @@ function wifi(doc) {
         enabled: triBool(valueOf(n.Enable)),
         status: valueOf(n.Status),
         channel: valueOf(n.Channel),
+        channelInUse: num(String(valueOf(n.ChannelsInUse) ?? "").split(",")[0]),
         autoChannel: triBool(valueOf(n.AutoChannelEnable)),
         standard: valueOf(n.Standard),
         hidden: valueOf(n.SSIDAdvertisementEnabled) === null ? null : !toBool(valueOf(n.SSIDAdvertisementEnabled)),
@@ -252,7 +287,8 @@ function lanPorts(doc) {
     .filter(([, n]) => !toBool(valueOf(n.Upstream)))
     .map(([path, n], i) => ({
       id: path,
-      label: valueOf(n.Name) || `LAN ${path.split(".").pop() || i + 1}`,
+      label: `LAN ${path.split(".").pop() || i + 1}`,
+      name: valueOf(n.Name),
       enabled: valueOf(n.Enable) === null ? null : toBool(valueOf(n.Enable)),
       status: valueOf(n.Status),
       up: isUp(valueOf(n.Status)),
@@ -287,7 +323,8 @@ function summary(doc, profile = {}) {
     lastBoot: lastInform && Number.isFinite(uptime) ? new Date(lastInform - uptime * 1000) : null,
     connectionRequestUrl: scalar.connectionRequestUrl.value,
     wan: { primary: primaryWan(connections), connections },
-    optical: { rxPower: resolveOptical(doc, "rxPower", profile), txPower: resolveOptical(doc, "txPower", profile) },
+    optical: { rxPower: resolveOptical(doc, "rxPower", profile), txPower: resolveOptical(doc, "txPower", profile), module: opticalModule(doc), verified: !!profile.verifiedOnRealDevice },
+    system: system(doc),
     wifi: radios.map(({ writePaths, ...r }) => r),
     counts: {
       clients: hostRows.length,
@@ -339,7 +376,7 @@ function readiness(doc, s) {
     item("Wi-Fi SSID writable", radios.some(r => r.writable) ? "ok" : "warn", radios.some(r => r.writable) ? "Yes" : "Unknown or read-only"),
     item("Wi-Fi password path", radios.some(r => r.writePaths.password) ? "ok" : "bad", radios.find(r => r.writePaths.password)?.writePaths.password || "Not found"),
     item("Connected clients", hostRows.length ? "ok" : "warn", `${hostRows.length} hosts`),
-    item("Wi-Fi client signal", hostRows.some(h => h.signal !== null) ? "ok" : "warn", hostRows.some(h => h.signal !== null) ? "RSSI available" : "No RSSI field found"),
+    item("Wi-Fi client signal", hostRows.some(h => h.signal !== null) ? "ok" : "warn", hostRows.some(h => h.signal !== null) ? "RSSI available" : radios.some(r => expand(doc, `${r.id}.AssociatedDevice.*`).length) ? "Not exposed by this model (associated devices report MAC/IP only)" : "No RSSI field found"),
     item("LAN ports", ports.length ? "ok" : "warn", `${ports.length} ports, ${ports.filter(p => p.up).length} up`),
     item("Ping diagnostics", get(doc, ROOTS[root]?.ping || "") ? "ok" : "warn", ROOTS[root]?.ping || "-"),
     item("Speed test (TR-143)", get(doc, ROOTS[root]?.download || "") ? "ok" : "warn", ROOTS[root]?.download || "-"),
@@ -355,4 +392,4 @@ function readiness(doc, s) {
   return { items, leafCount, valued, valuedPct, vendorExtensions: vendorExt, opticalCandidates };
 }
 
-module.exports = { summary, wifi, clients, lanPorts, wanConnections, readiness, learnedMap, resolveOptical, toDbm, gradeOptical };
+module.exports = { summary, wifi, clients, lanPorts, wanConnections, readiness, learnedMap, resolveOptical, toDbm, gradeOptical, opticalModule, system };

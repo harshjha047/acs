@@ -91,7 +91,7 @@ export default function WifiPanel({ deviceId }) {
               <Cell>{r.band || "?"}</Cell>
               <Cell><span className="font-semibold text-plum">{r.ssid || "—"}</span>{r.hidden && <span className="ml-2 text-xs text-ink-2">(hidden)</span>}</Cell>
               <Cell><Badge tone={r.enabled ? "ok" : "muted"}>{r.enabled === null ? "?" : r.enabled ? "on" : "off"}</Badge></Cell>
-              <Cell>{r.autoChannel ? `auto (${r.channel ?? "?"})` : r.channel}</Cell>
+              <Cell>{r.autoChannel || r.channel === 0 ? `auto (${r.channelInUse ?? (r.channel || "?")})` : r.channel}</Cell>
               <Cell>{r.clients}</Cell>
               <Cell>{r.security}</Cell>
               <Cell className="text-right"><Button variant="secondary" className="min-h-9 px-3" onClick={() => setEditing(r)}>Edit</Button></Cell>

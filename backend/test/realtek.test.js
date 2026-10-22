@@ -74,3 +74,41 @@ test("readiness: reports value coverage, unknown Wi-Fi state, no 'Response' fals
   assert.equal(r.opticalCandidates.some(c => /ResponseTime/.test(c.path)), false);
   assert.equal(r.items.find(i => i.feature === "Connection request (instant actions)").status, "warn");
 });
+
+test("CT-COM EPON module: temperature 1/256 °C, voltage 100 µV, bias 2 µA", () => {
+  const doc = realtek({
+    [`${IGD}.WANDevice.1.X_CT-COM_EponInterfaceConfig.RXPower`]: 256,
+    [`${IGD}.WANDevice.1.X_CT-COM_EponInterfaceConfig.TransceiverTemperature`]: 11142,
+    [`${IGD}.WANDevice.1.X_CT-COM_EponInterfaceConfig.SupplyVottage`]: 32838,
+    [`${IGD}.WANDevice.1.X_CT-COM_EponInterfaceConfig.BiasCurrent`]: 6053,
+    [`${IGD}.WANDevice.1.X_CT-COM_EponInterfaceConfig.Status`]: "Up",
+    [`${IGD}.WANDevice.1.X_CT-COM_EponInterfaceConfig.Stats.FECError`]: 1131376230
+  });
+  const s = view.summary(doc, { verifiedOnRealDevice: true, units: { rxPower: "0.1uW" } });
+  assert.deepEqual(
+    { t: s.optical.module.temperatureC, v: s.optical.module.voltageV, b: s.optical.module.biasMa, fec: s.optical.module.fecErrors },
+    { t: 43.5, v: 3.28, b: 12.11, fec: 1131376230 }
+  );
+  assert.equal(s.optical.rxPower.dbm, -15.92);
+  assert.equal(s.optical.rxPower.assumed, false);
+  assert.equal(s.optical.verified, true);
+});
+
+test("WAN IPv6 and PPP uptime; Wi-Fi channel in use; system memory", () => {
+  const P = `${IGD}.WANDevice.1.WANConnectionDevice.1.WANPPPConnection.1`;
+  const doc = realtek({
+    [`${P}.Uptime`]: 37687,
+    [`${P}.X_CT-COM_IPv6IPAddress`]: "2001:db8::1",
+    [`${P}.X_CT-COM_IPv6Prefix`]: "2001:db8:1::/64",
+    [`${W}.1.Channel`]: 0,
+    [`${W}.1.ChannelsInUse`]: "36",
+    [`${IGD}.DeviceInfo.MemoryStatus.Total`]: 57516,
+    [`${IGD}.DeviceInfo.MemoryStatus.Free`]: 11332
+  });
+  const s = view.summary(doc);
+  assert.equal(s.wan.primary.ipv6, "2001:db8::1");
+  assert.equal(s.wan.primary.ipv6Prefix, "2001:db8:1::/64");
+  assert.equal(s.wan.primary.Uptime, 37687);
+  assert.equal(view.wifi(doc).find(r => r.ssid === "Home_5G").channelInUse, 36);
+  assert.deepEqual(s.system, { memTotalKb: 57516, memFreeKb: 11332, cpuPct: null });
+});

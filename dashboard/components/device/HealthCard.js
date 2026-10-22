@@ -23,6 +23,9 @@ export default function HealthCard({ summary }) {
         <Field label="Firmware" value={summary.identity.softwareVersion} />
         <Field label="Hardware" value={summary.identity.hardwareVersion} />
         <Field label="Last WAN error" value={p?.LastConnectionError && p.LastConnectionError !== "ERROR_NONE" ? p.LastConnectionError : "None"} />
+        <Field label={p?.kind === "PPPoE" ? "PPPoE up for" : "WAN up for"} value={p?.Uptime ? duration(Number(p.Uptime)) : null} />
+        <Field label="IPv6" value={p?.ipv6 || null} mono />
+        <Field label="Memory free" value={summary.system?.memTotalKb ? `${Math.round(summary.system.memFreeKb / 1024)} / ${Math.round(summary.system.memTotalKb / 1024)} MB` : null} />
       </dl>
       {!online && summary.online.state === "offline" && (
         <p className="mt-4 rounded-control bg-bad-bg px-4 py-3 text-sm text-bad">

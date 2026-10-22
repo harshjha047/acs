@@ -1,5 +1,6 @@
 import Card from "../ui/Card";
 import Badge from "../ui/Badge";
+import Field from "../ui/Field";
 import { gradeTone } from "../../lib/format";
 
 const HINT = {
@@ -23,7 +24,11 @@ function Reading({ label, r, range }) {
   );
 }
 
+const fmt = (v, unit) => (v === null || v === undefined ? null : `${v} ${unit}`);
+const tempTone = t => (t === null ? "muted" : t > 75 ? "bad" : t > 65 ? "warn" : "ok");
+
 export default function OpticalCard({ optical }) {
+  const m = optical.module;
   if (!optical.rxPower.path && !optical.txPower.path) {
     return <Card title="Optical signal"><p className="text-sm text-ink-2">No optical readings. Not a fiber ONT, or the vendor path is not mapped yet (see Readiness).</p></Card>;
   }
@@ -33,6 +38,15 @@ export default function OpticalCard({ optical }) {
         <Reading label="Rx power" r={optical.rxPower} range="-8 to -25 dBm" />
         <Reading label="Tx power" r={optical.txPower} range="0.5 to 5 dBm" />
       </div>
+      {m && (
+        <dl className="mt-4 grid grid-cols-2 gap-4 md:grid-cols-4">
+          <Field label="Module temp">{m.temperatureC === null ? "—" : <Badge tone={tempTone(m.temperatureC)}>{m.temperatureC} °C</Badge>}</Field>
+          <Field label="Supply voltage" value={fmt(m.voltageV, "V")} />
+          <Field label="Laser bias" value={fmt(m.biasMa, "mA")} />
+          <Field label="PON link" value={m.status} />
+        </dl>
+      )}
+      {optical.verified && <p className="mt-3 text-xs text-ok">Units verified on a real device of this model.</p>}
       <p className="mt-3 text-sm text-ink">{HINT[optical.rxPower.grade]}</p>
     </Card>
   );
