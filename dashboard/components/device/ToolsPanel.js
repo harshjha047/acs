@@ -1,7 +1,7 @@
 import { useCallback, useState } from "react";
 import api from "../../lib/api";
 import usePoll from "../../lib/usePoll";
-import { apiError, when } from "../../lib/format";
+import { apiError, errTone, when } from "../../lib/format";
 import Card from "../ui/Card";
 import Badge from "../ui/Badge";
 import Button from "../ui/Button";
@@ -35,7 +35,7 @@ function useDiagnostic(deviceId, kind) {
       toast(status === 202 ? "Test queued; runs at the device's next check-in." : "Test started on the device.", status === 202 ? "warn" : "ok");
       poll.start();
     } catch (err) {
-      toast(apiError(err, "Could not start test"), "bad");
+      toast(apiError(err, "Could not start test"), errTone(err));
     }
   }
   async function check() {

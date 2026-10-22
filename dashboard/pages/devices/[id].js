@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { useRouter } from "next/router";
 import api from "../../lib/api";
-import { ago, apiError } from "../../lib/format";
+import { ago, apiError, errTone } from "../../lib/format";
 import Shell from "../../components/Shell";
 import Card from "../../components/ui/Card";
 import Button from "../../components/ui/Button";
@@ -68,7 +68,7 @@ export default function DeviceDetail() {
       await load();
       setVersion(v => v + 1);
     } catch (err) {
-      toast(apiError(err, "Refresh failed"), "bad", { id: tid });
+      toast(apiError(err, "Refresh failed"), errTone(err), { id: tid });
     } finally {
       setBusy("");
     }
@@ -88,7 +88,7 @@ export default function DeviceDetail() {
       }
       closeConfirm();
     } catch (err) {
-      toast(apiError(err, `${kind === "reboot" ? "Reboot" : "Remove"} failed`), "bad");
+      toast(apiError(err, `${kind === "reboot" ? "Reboot" : "Remove"} failed`), errTone(err));
     } finally {
       setBusy("");
     }

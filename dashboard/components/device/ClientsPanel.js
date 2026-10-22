@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from "react";
 import api from "../../lib/api";
-import { apiError, gradeTone } from "../../lib/format";
+import { apiError, errTone, gradeTone } from "../../lib/format";
 import Card from "../ui/Card";
 import Badge from "../ui/Badge";
 import Button from "../ui/Button";
@@ -26,7 +26,7 @@ export default function ClientsPanel({ deviceId }) {
       toast(status === 202 ? "Queued. Device not reachable now; list updates after its next check-in." : "Client list updated.", status === 202 ? "warn" : "ok");
       load();
     } catch (err) {
-      toast(apiError(err, "Refresh failed"), "bad");
+      toast(apiError(err, "Refresh failed"), errTone(err));
     } finally {
       setBusy(false);
     }

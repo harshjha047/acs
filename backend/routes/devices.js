@@ -6,6 +6,7 @@ const DeviceNote = require("../models/DeviceNote");
 const DeviceProfile = require("../models/DeviceProfile");
 const Customer = require("../models/Customer");
 const AuditLog = require("../models/AuditLog");
+const rateLimit = require("express-rate-limit");
 const { requireAuth, requireRole } = require("../middleware/auth");
 const { rootOf, leaves, get, valueOf } = require("../lib/tree");
 const { ROOTS } = require("../lib/catalog");
@@ -13,6 +14,42 @@ const view = require("../lib/deviceView");
 const diag = require("../lib/diagnostics");
 
 router.use(requireAuth);
+
+const actionLimiter = rateLimit({
+  windowMs: 60 * 1000,
+  limit: 20,
+  keyGenerator: req => req.user.id,
+  standardHeaders: "draft-7",
+  legacyHeaders: false,
+  message: { error: "Too many actions in a minute. Wait a moment and try again." }
+});
+router.use((req, res, next) => (req.method === "GET" ? next() : actionLimiter(req, res, next)));
+
+const inflight = new Set();
+const DUPLICATE = {
+  reboot: t => t.name === "reboot",
+  refresh: t => t.name === "refreshObject" || t.name === "getParameterValues",
+  wifi: t => t.name === "setParameterValues" && t.parameterValues?.some(([p]) => /WLANConfiguration|\.WiFi\./.test(p)),
+  diagnostic: t => t.name === "setParameterValues" && t.parameterValues?.some(([p]) => p.endsWith(".DiagnosticsState"))
+};
+const DUPLICATE_MSG = {
+  reboot: "A reboot is already queued for this device. It runs at the next check-in.",
+  refresh: "A refresh is already queued for this device. It runs at the next check-in.",
+  wifi: "A Wi-Fi change is already waiting for this device. It applies at the next check-in.",
+  diagnostic: "A test is already queued for this device. It runs at the next check-in."
+};
+
+function once(kind) {
+  return async (req, res, next) => {
+    const key = `${req.device._id}:${kind}`;
+    if (inflight.has(key)) return res.status(409).json({ error: DUPLICATE_MSG[kind], duplicate: true });
+    const tasks = await genie.getTasks(req.device.genieacsDeviceId).catch(() => []);
+    if (tasks.some(DUPLICATE[kind])) return res.status(409).json({ error: DUPLICATE_MSG[kind], duplicate: true });
+    inflight.add(key);
+    res.on("close", () => inflight.delete(key));
+    next();
+  };
+}
 
 router.param("id", async (req, res, next, id) => {
   if (!isValidObjectId(id)) return res.status(400).json({ error: "Invalid device id" });
@@ -171,7 +208,7 @@ function wifiValues(radio, body) {
   return values;
 }
 
-router.put("/:id/wifi", async (req, res) => {
+router.put("/:id/wifi", once("wifi"), async (req, res) => {
   const doc = await loadTree(req);
   const radio = view.wifi(doc).find(r => r.id === req.body?.id);
   if (!radio) return res.status(404).json({ error: "Wi-Fi interface not found" });
@@ -190,7 +227,7 @@ router.put("/:id/wifi", async (req, res) => {
   res.status(statusFor(details.outcome)).json(details);
 });
 
-router.post("/:id/refresh", async (req, res) => {
+router.post("/:id/refresh", once("refresh"), async (req, res) => {
   const scope = ["summary", "clients", "full"].includes(req.query.scope) ? req.query.scope : "summary";
   const doc = await loadTree(req);
   const root = rootOf(doc);
@@ -254,7 +291,7 @@ async function readDiagnostic(req, kind) {
   };
 }
 
-router.post("/:id/diagnostics/ping", async (req, res) => {
+router.post("/:id/diagnostics/ping", once("diagnostic"), async (req, res) => {
   const host = String(req.body?.host || "8.8.8.8").trim();
   const count = Math.min(Math.max(parseInt(req.body?.count, 10) || 4, 1), 10);
   if (!HOST_RE.test(host)) return res.status(400).json({ error: "Invalid host" });
@@ -264,7 +301,7 @@ router.post("/:id/diagnostics/ping", async (req, res) => {
 
 router.get("/:id/diagnostics/ping", async (req, res) => res.json(await readDiagnostic(req, "ping")));
 
-router.post("/:id/diagnostics/speed", async (req, res) => {
+router.post("/:id/diagnostics/speed", once("diagnostic"), async (req, res) => {
   const url = process.env.SPEEDTEST_URL;
   if (!url) return res.status(503).json({ error: "SPEEDTEST_URL is not configured" });
   const details = await startDiagnostic(req, "speed", { url });
@@ -337,7 +374,7 @@ router.get("/:id/diagnostics", async (req, res) => {
 
 const reasonOf = req => String(req.body?.reason || "").trim().slice(0, 500);
 
-router.post("/:id/reboot", requireRole("noc", "admin"), async (req, res) => {
+router.post("/:id/reboot", requireRole("noc", "admin"), once("reboot"), async (req, res) => {
   const reason = reasonOf(req);
   if (!reason) return res.status(400).json({ error: "Reason is required" });
   const details = await audit(req, "reboot", async () => {

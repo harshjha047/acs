@@ -25,3 +25,4 @@ export function onlineState(device) {
 }
 
 export const apiError = (err, fallback) => err?.response?.data?.error || fallback;
+export const errTone = err => ([409, 429].includes(err?.response?.status) ? "warn" : "bad");

@@ -5,6 +5,7 @@ import Card from "../ui/Card";
 import Badge from "../ui/Badge";
 import Button from "../ui/Button";
 import { useToast } from "../ui/Toast";
+import useAction from "../../lib/useAction";
 
 const ACTION = {
   diagnostics_view: "Viewed diagnostics", reboot: "Reboot", factory_reset: "Factory reset", wifi_update: "Wi-Fi change", firmware_push: "Firmware push", device_remove: "Removed from ACS",
@@ -29,7 +30,7 @@ export default function TimelinePanel({ deviceId }) {
   const toast = useToast();
   const [events, setEvents] = useState(null);
   const [text, setText] = useState("");
-  const [busy, setBusy] = useState(false);
+  const [busy, run] = useAction();
   const [filter, setFilter] = useState("all");
 
   const load = useCallback(() => {
@@ -37,19 +38,19 @@ export default function TimelinePanel({ deviceId }) {
   }, [deviceId, toast]);
   useEffect(load, [load]);
 
-  async function addNote(e) {
+  function addNote(e) {
     e.preventDefault();
     if (!text.trim()) return;
-    setBusy(true);
-    try {
-      await api.post(`/devices/${deviceId}/notes`, { text });
-      setText("");
-      load();
-    } catch (err) {
-      toast(apiError(err, "Could not save note"), "bad");
-    } finally {
-      setBusy(false);
-    }
+    run(async () => {
+      try {
+        await api.post(`/devices/${deviceId}/notes`, { text });
+        setText("");
+        toast("Note saved.", "ok", { duration: 2500 });
+        load();
+      } catch (err) {
+        toast(apiError(err, "Could not save note"), "bad");
+      }
+    });
   }
 
   const shown = (events || []).filter(e => filter === "all" || e.type === filter);
@@ -59,7 +60,7 @@ export default function TimelinePanel({ deviceId }) {
         <form onSubmit={addNote} className="flex flex-col gap-3">
           <textarea className="min-h-20 w-full rounded-control border border-line p-3 text-sm outline-none focus:border-plum" maxLength={2000}
             placeholder="e.g. Customer reports drops every evening; Rx was -26 dBm; advised technician visit" value={text} onChange={e => setText(e.target.value)} />
-          <div><Button type="submit" disabled={busy || !text.trim()}>{busy ? "Saving..." : "Save note"}</Button></div>
+          <div><Button type="submit" loading={busy} disabled={!text.trim()}>{busy ? "Saving…" : "Save note"}</Button></div>
         </form>
       </Card>
       <Card title="History" action={

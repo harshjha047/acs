@@ -7,6 +7,7 @@ import Badge from "../components/ui/Badge";
 import Button from "../components/ui/Button";
 import Modal from "../components/ui/Modal";
 import { useToast } from "../components/ui/Toast";
+import useAction from "../lib/useAction";
 
 const ROLES = [
   ["agent", "Agent: view, refresh, diagnostics, Wi-Fi"],
@@ -24,6 +25,8 @@ export default function UsersPage() {
   const [resetFor, setResetFor] = useState(null);
   const [password, setPassword] = useState("");
   const [me, setMe] = useState(null);
+  const [saving, setSaving] = useState(null);
+  const [creating, runCreate] = useAction();
 
   const load = useCallback(() => {
     api.get("/users").then(({ data }) => setUsers(data)).catch(err => setError(apiError(err, "Failed to load users")));
@@ -35,6 +38,8 @@ export default function UsersPage() {
   }, [load]);
 
   async function patch(id, body, ok) {
+    if (saving) return false;
+    setSaving(id);
     try {
       await api.patch(`/users/${id}`, body);
       toast(ok, "ok");
@@ -43,19 +48,23 @@ export default function UsersPage() {
     } catch (err) {
       toast(apiError(err, "Update failed"), "bad");
       return false;
+    } finally {
+      setSaving(null);
     }
   }
 
-  async function create(e) {
+  function create(e) {
     e.preventDefault();
-    try {
-      await api.post("/users", form);
-      toast("User created.", "ok");
-      setForm(null);
-      load();
-    } catch (err) {
-      toast(apiError(err, "Create failed"), "bad");
-    }
+    runCreate(async () => {
+      try {
+        await api.post("/users", form);
+        toast("User created.", "ok");
+        setForm(null);
+        load();
+      } catch (err) {
+        toast(apiError(err, "Create failed"), "bad");
+      }
+    });
   }
 
   async function resetPassword() {
@@ -89,7 +98,7 @@ export default function UsersPage() {
                     <select
                       className="h-9 rounded-control border border-line bg-white px-2 text-sm"
                       value={u.role}
-                      disabled={self}
+                      disabled={self || !!saving}
                       onChange={e => patch(u._id, { role: e.target.value }, "Role updated.")}
                     >
                       {ROLES.map(([r]) => <option key={r} value={r}>{r}</option>)}
@@ -98,9 +107,9 @@ export default function UsersPage() {
                   <td><Badge tone={u.isActive ? "ok" : "muted"}>{u.isActive ? "active" : "disabled"}</Badge></td>
                   <td>{when(u.lastLoginAt)}</td>
                   <td className="space-x-2 whitespace-nowrap text-right">
-                    <Button variant="secondary" className="min-h-9 px-3" onClick={() => setResetFor(u)}>Password</Button>
+                    <Button variant="secondary" className="min-h-9 px-3" disabled={!!saving} onClick={() => setResetFor(u)}>Password</Button>
                     {!self && (
-                      <Button variant="secondary" className="min-h-9 px-3" onClick={() => patch(u._id, { isActive: !u.isActive }, u.isActive ? "User disabled." : "User enabled.")}>
+                      <Button variant="secondary" className="min-h-9 px-3" loading={saving === u._id} disabled={!!saving} onClick={() => patch(u._id, { isActive: !u.isActive }, u.isActive ? "User disabled." : "User enabled.")}>
                         {u.isActive ? "Disable" : "Enable"}
                       </Button>
                     )}
@@ -126,7 +135,7 @@ export default function UsersPage() {
             </select>
             <div className="mt-3 flex justify-end gap-2">
               <Button type="button" variant="secondary" onClick={() => setForm(null)}>Cancel</Button>
-              <Button type="submit">Create</Button>
+              <Button type="submit" loading={creating}>{creating ? "Creating…" : "Create"}</Button>
             </div>
           </form>
         )}
@@ -139,7 +148,7 @@ export default function UsersPage() {
         footer={
           <>
             <Button variant="secondary" onClick={() => setResetFor(null)}>Cancel</Button>
-            <Button disabled={password.length < 12} onClick={resetPassword}>Save</Button>
+            <Button disabled={password.length < 12} loading={!!saving} onClick={resetPassword}>Save</Button>
           </>
         }
       >

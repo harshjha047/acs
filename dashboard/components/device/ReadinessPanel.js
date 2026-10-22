@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import api from "../../lib/api";
-import { apiError } from "../../lib/format";
+import { apiError, errTone } from "../../lib/format";
 import Card from "../ui/Card";
 import Badge from "../ui/Badge";
 import Button from "../ui/Button";
@@ -97,7 +97,7 @@ export default function ReadinessPanel({ deviceId }) {
         toast(`Fetched live: ${d.leafCount} parameters, ${d.valuedPct}% values.`, "ok", { id });
       }
     } catch (err) {
-      toast(apiError(err, "Fetch everything failed"), "bad", { id });
+      toast(apiError(err, "Fetch everything failed"), errTone(err), { id });
     } finally {
       setBusy("");
     }

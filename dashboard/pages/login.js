@@ -2,28 +2,28 @@ import { useState } from "react";
 import { useRouter } from "next/router";
 import api from "../lib/api";
 import Button from "../components/ui/Button";
+import useAction from "../lib/useAction";
 
 export default function Login() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
-  const [busy, setBusy] = useState(false);
+  const [busy, run] = useAction();
   const router = useRouter();
 
-  async function handleSubmit(e) {
+  function handleSubmit(e) {
     e.preventDefault();
-    setError("");
-    setBusy(true);
-    try {
-      const { data } = await api.post("/auth/login", { email, password });
-      localStorage.setItem("token", data.token);
-      localStorage.setItem("user", JSON.stringify(data.user));
-      router.push("/devices");
-    } catch {
-      setError("Invalid credentials");
-    } finally {
-      setBusy(false);
-    }
+    run(async () => {
+      setError("");
+      try {
+        const { data } = await api.post("/auth/login", { email, password });
+        localStorage.setItem("token", data.token);
+        localStorage.setItem("user", JSON.stringify(data.user));
+        await router.push("/devices");
+      } catch (err) {
+        setError(err?.response?.status === 429 ? "Too many attempts. Try again in a few minutes." : "Invalid credentials");
+      }
+    });
   }
 
   const field = "h-11 w-full rounded-control border border-line bg-white px-4 text-sm outline-none focus:border-plum";
@@ -39,7 +39,7 @@ export default function Login() {
           <input className={field} placeholder="Password" type="password" value={password} onChange={e => setPassword(e.target.value)} />
         </div>
         {error && <p className="mt-3 text-sm font-semibold text-bad">{error}</p>}
-        <Button type="submit" disabled={busy} className="mt-6 w-full">{busy ? "Signing in..." : "Sign in"}</Button>
+        <Button type="submit" loading={busy} className="mt-6 w-full">{busy ? "Signing in…" : "Sign in"}</Button>
         <p className="mt-6 font-mono text-[11px] uppercase tracking-widest text-ink-3">Powered by {"<Div/>"}</p>
       </form>
     </div>

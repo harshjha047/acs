@@ -4,6 +4,7 @@ import { apiError } from "../../lib/format";
 import Button from "../ui/Button";
 import Modal from "../ui/Modal";
 import { useToast } from "../ui/Toast";
+import useAction from "../../lib/useAction";
 
 const input = "h-11 w-full rounded-control border border-line bg-white px-4 text-sm outline-none focus:border-plum";
 
@@ -13,7 +14,7 @@ export default function CustomerLink({ device, onChange }) {
   const [q, setQ] = useState("");
   const [results, setResults] = useState([]);
   const [form, setForm] = useState({ name: "", phone: "", accountId: "", address: "" });
-  const [busy, setBusy] = useState(false);
+  const [busy, run] = useAction();
   const c = device.customer;
 
   useEffect(() => {
@@ -22,8 +23,7 @@ export default function CustomerLink({ device, onChange }) {
     return () => clearTimeout(t);
   }, [q, open]);
 
-  async function link(customerId) {
-    setBusy(true);
+  async function doLink(customerId) {
     try {
       const { data } = await api.put(`/devices/${device._id}/customer`, { customerId });
       onChange(data);
@@ -31,21 +31,21 @@ export default function CustomerLink({ device, onChange }) {
       toast(customerId ? "Customer linked" : "Customer unlinked", "ok");
     } catch (err) {
       toast(apiError(err, "Link failed"), "bad");
-    } finally {
-      setBusy(false);
     }
   }
 
-  async function createAndLink(e) {
+  const link = customerId => run(() => doLink(customerId));
+
+  function createAndLink(e) {
     e.preventDefault();
-    setBusy(true);
-    try {
-      const { data } = await api.post("/customers", form);
-      await link(data._id);
-    } catch (err) {
-      toast(apiError(err, "Could not create customer"), "bad");
-      setBusy(false);
-    }
+    run(async () => {
+      try {
+        const { data } = await api.post("/customers", form);
+        await doLink(data._id);
+      } catch (err) {
+        toast(apiError(err, "Could not create customer"), "bad");
+      }
+    });
   }
 
   return (
@@ -62,12 +62,12 @@ export default function CustomerLink({ device, onChange }) {
         <Button variant="secondary" onClick={() => setOpen(true)}>Link customer</Button>
       )}
       {open && (
-        <Modal open onClose={() => setOpen(false)} title="Link customer" footer={c && <Button variant="danger" disabled={busy} onClick={() => link(null)}>Unlink</Button>}>
+        <Modal open onClose={() => setOpen(false)} title="Link customer" footer={c && <Button variant="danger" loading={busy} onClick={() => link(null)}>Unlink</Button>}>
           <input className={input} autoFocus placeholder="Search name, phone, account ID" value={q} onChange={e => setQ(e.target.value)} />
           <ul className="mt-2 max-h-48 overflow-y-auto">
             {results.map(r => (
               <li key={r._id}>
-                <button disabled={busy} onClick={() => link(r._id)} className="w-full rounded-control px-3 py-2 text-left hover:bg-canvas">
+                <button disabled={busy} onClick={() => link(r._id)} className="w-full rounded-control px-3 py-2 text-left transition hover:bg-canvas active:scale-[0.99] disabled:cursor-wait disabled:opacity-50">
                   <span className="font-semibold text-plum">{r.name}</span> <span className="font-mono text-xs text-ink-2">{r.accountId} {r.phone}</span>
                 </button>
               </li>
@@ -79,7 +79,7 @@ export default function CustomerLink({ device, onChange }) {
             <input className={input} required placeholder="Account ID *" value={form.accountId} onChange={e => setForm({ ...form, accountId: e.target.value })} />
             <input className={input} placeholder="Phone" value={form.phone} onChange={e => setForm({ ...form, phone: e.target.value })} />
             <input className={input} placeholder="Address" value={form.address} onChange={e => setForm({ ...form, address: e.target.value })} />
-            <Button type="submit" disabled={busy}>Create and link</Button>
+            <Button type="submit" loading={busy}>{busy ? "Saving…" : "Create and link"}</Button>
           </form>
         </Modal>
       )}
