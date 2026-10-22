@@ -5,6 +5,7 @@ const IGD = "InternetGatewayDevice";
 const meaningful = v => v !== null && v !== undefined && v !== "" && v !== "0.0.0.0";
 const lower = v => (typeof v === "string" ? v.toLowerCase() : v);
 const toBool = v => v === true || v === 1 || v === "1" || v === "true";
+const triBool = v => (v === null || v === undefined || v === "" ? null : toBool(v));
 const firstKey = (node, re) => childKeys(node).find(k => re.test(k));
 
 function pickPath(doc, candidates, preferred) {
@@ -104,8 +105,13 @@ function primaryWan(list) {
     || list.find(c => internet(c)) || list[0] || null;
 }
 
-function bandOf(channel, standard, extra) {
-  if (extra) return /5/.test(String(extra)) ? "5 GHz" : /6/.test(String(extra)) ? "6 GHz" : "2.4 GHz";
+const CT_RFBAND = { 0: "2.4 GHz", 1: "5 GHz" };
+
+function bandOf(channel, standard, extra, extraKey) {
+  if (extra !== null && extra !== undefined && extra !== "") {
+    if (/X_CT-COM_RFBand/i.test(extraKey || "") && CT_RFBAND[Number(extra)]) return CT_RFBAND[Number(extra)];
+    return /5/.test(String(extra)) ? "5 GHz" : /6/.test(String(extra)) ? "6 GHz" : "2.4 GHz";
+  }
   const ch = Number(channel);
   if (ch > 14) return "5 GHz";
   if (ch >= 1) return "2.4 GHz";
@@ -124,14 +130,14 @@ function wifi(doc) {
       return {
         id: path,
         ssid: valueOf(n.SSID),
-        enabled: toBool(valueOf(n.Enable)),
+        enabled: triBool(valueOf(n.Enable)),
         status: valueOf(n.Status),
         channel: valueOf(n.Channel),
-        autoChannel: toBool(valueOf(n.AutoChannelEnable)),
+        autoChannel: triBool(valueOf(n.AutoChannelEnable)),
         standard: valueOf(n.Standard),
         hidden: valueOf(n.SSIDAdvertisementEnabled) === null ? null : !toBool(valueOf(n.SSIDAdvertisementEnabled)),
         security: valueOf(n.BeaconType),
-        band: bandOf(valueOf(n.Channel), valueOf(n.Standard), bandKey && valueOf(n[bandKey])),
+        band: bandOf(valueOf(n.Channel), valueOf(n.Standard), bandKey && valueOf(n[bandKey]), bandKey),
         clients: valueOf(n.TotalAssociations) ?? assoc,
         writePaths: {
           ssid: n.SSID ? `${path}.SSID` : null,
@@ -155,10 +161,10 @@ function wifi(doc) {
       return {
         id: path,
         ssid: valueOf(n.SSID),
-        enabled: toBool(valueOf(n.Enable)),
+        enabled: triBool(valueOf(n.Enable)),
         status: valueOf(n.Status),
         channel: valueOf(radio?.Channel),
-        autoChannel: toBool(valueOf(radio?.AutoChannelEnable)),
+        autoChannel: triBool(valueOf(radio?.AutoChannelEnable)),
         standard: valueOf(radio?.OperatingStandards),
         hidden: ap && valueOf(ap[1].SSIDAdvertisementEnabled) !== null ? !toBool(valueOf(ap[1].SSIDAdvertisementEnabled)) : null,
         security: valueOf(ap?.[1]?.Security?.ModeEnabled),
@@ -225,8 +231,8 @@ function clients(doc) {
       active: valueOf(h.Active) === null ? null : toBool(valueOf(h.Active)),
       via: w || /wlan|wifi|802\.11/i.test(link) ? "wifi" : /ethernet|lan/i.test(link) ? "ethernet" : "unknown",
       port: /LANEthernetInterfaceConfig\.(\d+)|Ethernet\.Interface\.(\d+)/.exec(link)?.slice(1).find(Boolean) || null,
-      ssid: w?.ssid || radios.find(r => link.startsWith(r.id))?.ssid || null,
-      band: w?.band || null,
+      ssid: w?.ssid || radios.find(r => link === r.id || link.startsWith(`${r.id}.`))?.ssid || null,
+      band: w?.band || radios.find(r => link === r.id || link.startsWith(`${r.id}.`))?.band || null,
       signal: Number.isFinite(w?.signal) ? w.signal : null,
       signalGrade: gradeSignal(w?.signal),
       rate: w?.rate ?? null,
@@ -305,7 +311,10 @@ const isPrivate = url => /\/\/(10\.|127\.|192\.168\.|172\.(1[6-9]|2\d|3[01])\.|1
 
 function readiness(doc, s) {
   const root = rootOf(doc);
-  const leafCount = root ? leaves(doc[root], root).length : 0;
+  const allLeaves = root ? leaves(doc[root], root) : [];
+  const leafCount = allLeaves.length;
+  const valued = allLeaves.filter(([, n]) => n._value !== undefined).length;
+  const valuedPct = leafCount ? Math.round((valued / leafCount) * 100) : 0;
   const radios = wifi(doc);
   const hostRows = clients(doc);
   const ports = lanPorts(doc);
@@ -316,6 +325,7 @@ function readiness(doc, s) {
   const items = [
     item("Data model", root ? "ok" : "bad", root || "No root object"),
     item("Full parameter tree fetched", leafCount > 100 ? "ok" : "warn", `${leafCount} parameters`, null),
+    item("Parameter values fetched", valuedPct >= 80 ? "ok" : "warn", `${valued} of ${leafCount} (${valuedPct}%)${valuedPct < 80 ? ": run Fetch everything; if it stays low, check cwmp logs for faults" : ""}`),
     item("Firmware version", meaningful(s.identity.softwareVersion) ? "ok" : "warn", s.identity.softwareVersion || "Not found", s.resolved.softwareVersion),
     item("Uptime / last boot", s.uptime !== null ? "ok" : "warn", s.uptime !== null ? `${s.uptime}s` : "Not found", s.resolved.uptime),
     item("WAN connections", s.wan.connections.length ? "ok" : "bad", `${s.wan.connections.length} found`),
@@ -325,7 +335,7 @@ function readiness(doc, s) {
       s.optical.rxPower.dbm !== null ? `${s.optical.rxPower.dbm} dBm from raw ${s.optical.rxPower.raw} (${s.optical.rxPower.unit}${s.optical.rxPower.assumed ? ", unit assumed: compare with ONT web UI" : ""})` : "Not found", s.optical.rxPower.path),
     item("Optical Tx power", s.optical.txPower.dbm !== null ? (s.optical.txPower.assumed ? "warn" : "ok") : "warn",
       s.optical.txPower.dbm !== null ? `${s.optical.txPower.dbm} dBm from raw ${s.optical.txPower.raw} (${s.optical.txPower.unit})` : "Not found", s.optical.txPower.path),
-    item("Wi-Fi SSIDs", radios.length ? "ok" : "bad", `${radios.length} found, ${radios.filter(r => r.enabled).length} enabled`),
+    item("Wi-Fi SSIDs", radios.length ? "ok" : "bad", `${radios.length} found, ${radios.filter(r => r.enabled === true).length} enabled${radios.some(r => r.enabled === null) ? `, ${radios.filter(r => r.enabled === null).length} unknown` : ""}`),
     item("Wi-Fi SSID writable", radios.some(r => r.writable) ? "ok" : "warn", radios.some(r => r.writable) ? "Yes" : "Unknown or read-only"),
     item("Wi-Fi password path", radios.some(r => r.writePaths.password) ? "ok" : "bad", radios.find(r => r.writePaths.password)?.writePaths.password || "Not found"),
     item("Connected clients", hostRows.length ? "ok" : "warn", `${hostRows.length} hosts`),
@@ -339,7 +349,7 @@ function readiness(doc, s) {
   ];
 
   const opticalCandidates = root ? leaves(doc[root], root)
-    .filter(([p]) => OPTICAL.rxPower.match.test(p) || OPTICAL.txPower.match.test(p) || /optical|gpon|epon|pon/i.test(p))
+    .filter(([p]) => OPTICAL.rxPower.match.test(p) || OPTICAL.txPower.match.test(p) || /optical|[gex]pon|(^|[._])pon/i.test(p))
     .slice(0, 50).map(([p, n]) => ({ path: p, value: valueOf(n) })) : [];
 
   return { items, leafCount, vendorExtensions: vendorExt, opticalCandidates };

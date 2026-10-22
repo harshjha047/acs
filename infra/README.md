@@ -93,3 +93,26 @@ CPE ACS URL, in order of preference:
 Off-box: set `BACKUP_RSYNC_TARGET=user@host:/path/` (key-based SSH). Restore:
 
     docker compose exec -T mongo mongorestore --archive --gzip --drop -u "$MONGO_USER" -p "$MONGO_PASS" --authenticationDatabase admin < /opt/acs/backups/<file>
+
+## CPE quirks (`cwmp.gpnNextLevel`, `cwmp.maxCommitIterations`)
+
+Per-OUI GenieACS tuning lives in `backend/scripts/tuneCwmp.js` (`QUIRKS`). Realtek `00177C` walks the tree level by level (NextLevel=true) because its NextLevel=false responses miss sub-objects.
+
+    docker compose exec api node scripts/tuneCwmp.js        # --off to remove
+    docker compose restart genieacs-cwmp
+
+## CWMP debug capture (temporary)
+
+    # docker-compose.override.yml
+    services:
+      genieacs-cwmp:
+        environment:
+          GENIEACS_DEBUG_FILE: /tmp/cwmp-debug.yaml
+    docker compose up -d genieacs-cwmp
+    docker compose exec api node scripts/tuneCwmp.js --debug 00177C
+    # reproduce (e.g. Fetch everything), then:
+    docker compose cp genieacs-cwmp:/tmp/cwmp-debug.yaml ./cwmp-debug.yaml
+    docker compose exec api node scripts/tuneCwmp.js --debug off
+    rm docker-compose.override.yml && docker compose up -d genieacs-cwmp
+
+The file contains every SOAP message, including PPPoE usernames; delete it after use.

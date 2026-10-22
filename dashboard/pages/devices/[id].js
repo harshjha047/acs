@@ -142,7 +142,7 @@ export default function DeviceDetail() {
                     <Field label="Active devices" value={summary.counts.activeClients} />
                     <Field label="On Wi-Fi" value={summary.counts.wifiClients} />
                     <Field label="LAN ports up" value={summary.counts.lanPortsUp} />
-                    <Field label="Wi-Fi on" value={summary.wifi.filter(w => w.enabled).map(w => w.ssid).join(", ") || "none"} />
+                    <Field label="Wi-Fi on" value={summary.wifi.filter(w => w.enabled).map(w => w.ssid).join(", ") || (summary.wifi.some(w => w.enabled === null) ? "unknown" : "none")} />
                   </dl>
                 </Card>
               </div>

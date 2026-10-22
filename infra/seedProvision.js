@@ -18,13 +18,20 @@ const now = Date.now();
 const igd = declare("InternetGatewayDevice.DeviceInfo.UpTime", {value: now}).size;
 if (igd) {
   declare("InternetGatewayDevice.LANDevice.*.WLANConfiguration.*.SSID", {value: now});
+  declare("InternetGatewayDevice.LANDevice.*.WLANConfiguration.*.Enable", {value: now});
+  declare("InternetGatewayDevice.LANDevice.*.WLANConfiguration.*.Channel", {value: now});
   declare("InternetGatewayDevice.LANDevice.*.Hosts.Host.*.*", {path: now, value: now});
   declare("InternetGatewayDevice.WANDevice.*.WANConnectionDevice.*.*.*.ConnectionStatus", {value: now});
   declare("InternetGatewayDevice.WANDevice.*.WANConnectionDevice.*.*.*.ExternalIPAddress", {value: now});
+  const daily = Date.now(86400000);
+  for (const o of ["X_CT-COM_EponInterfaceConfig", "X_CT-COM_GponInterfaceConfig", "X_HW_GponInterfaceConfig", "X_GponInterafceConfig", "X_ZTE-COM_WANPONInterfaceConfig"]) {
+    declare("InternetGatewayDevice.WANDevice.*." + o + ".*", {path: daily, value: now});
+  }
 } else {
   declare("Device.DeviceInfo.UpTime", {value: now});
   declare("Device.WiFi.SSID.*.SSID", {value: now});
   declare("Device.Hosts.Host.*.*", {path: now, value: now});
+  declare("Device.Optical.Interface.*.*", {path: Date.now(86400000), value: now});
 }
 `,
   diagnostics: `

@@ -12,7 +12,7 @@ const input = "h-11 w-full rounded-control border border-line bg-white px-4 text
 
 function EditWifi({ deviceId, radio, onClose, onSaved }) {
   const toast = useToast();
-  const [form, setForm] = useState({ ssid: radio.ssid || "", password: "", enabled: radio.enabled, hidden: !!radio.hidden, autoChannel: radio.autoChannel, channel: radio.channel ?? "" });
+  const [form, setForm] = useState({ ssid: radio.ssid || "", password: "", enabled: !!radio.enabled, hidden: !!radio.hidden, autoChannel: radio.autoChannel, channel: radio.channel ?? "" });
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const set = (k, v) => setForm(f => ({ ...f, [k]: v }));
@@ -23,7 +23,7 @@ function EditWifi({ deviceId, radio, onClose, onSaved }) {
     const body = { id: radio.id };
     if (e.ssid && form.ssid !== radio.ssid) body.ssid = form.ssid;
     if (e.password && form.password) body.password = form.password;
-    if (e.enabled && form.enabled !== radio.enabled) body.enabled = form.enabled;
+    if (e.enabled && form.enabled !== !!radio.enabled) body.enabled = form.enabled;
     if (e.advertise && form.hidden !== !!radio.hidden) body.hidden = form.hidden;
     if (e.autoChannel && form.autoChannel !== radio.autoChannel) body.autoChannel = form.autoChannel;
     if (e.channel && !form.autoChannel && String(form.channel) !== String(radio.channel)) body.channel = Number(form.channel);
@@ -90,7 +90,7 @@ export default function WifiPanel({ deviceId }) {
             <Row key={r.id} className={r.enabled ? "" : "opacity-60"}>
               <Cell>{r.band || "?"}</Cell>
               <Cell><span className="font-semibold text-plum">{r.ssid || "—"}</span>{r.hidden && <span className="ml-2 text-xs text-ink-2">(hidden)</span>}</Cell>
-              <Cell><Badge tone={r.enabled ? "ok" : "muted"}>{r.enabled ? "on" : "off"}</Badge></Cell>
+              <Cell><Badge tone={r.enabled ? "ok" : "muted"}>{r.enabled === null ? "?" : r.enabled ? "on" : "off"}</Badge></Cell>
               <Cell>{r.autoChannel ? `auto (${r.channel ?? "?"})` : r.channel}</Cell>
               <Cell>{r.clients}</Cell>
               <Cell>{r.security}</Cell>
