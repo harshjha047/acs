@@ -8,14 +8,14 @@ import Button from "../ui/Button";
 import Field from "../ui/Field";
 import { useToast } from "../ui/Toast";
 
-const finished = r => r && (r.state === "complete" || r.state === "error" || r.fault);
+const finished = r => r && (r.fault || (!r.stale && (r.state === "complete" || r.state === "error")));
 const input = "h-11 rounded-control border border-line bg-white px-4 text-sm outline-none focus:border-plum";
 
 function Status({ poll, queued }) {
   const r = poll.data;
   if (r?.fault) return <p className="text-sm text-bad">Device rejected the test: {r.fault.detail || r.fault.message} ({r.fault.code})</p>;
-  if (r?.state === "error") return <p className="text-sm text-bad">Test failed on device: {r.rawState}</p>;
-  if (poll.polling) return <p className="text-sm text-ink-2">{queued ? "Queued; waiting for the device to check in..." : "Running on the device..."}</p>;
+  if (r?.state === "error" && !r.stale) return <p className="text-sm text-bad">Test failed on device: {r.rawState}</p>;
+  if (poll.polling) return <p className="text-sm text-ink-2">{queued ? "Queued; runs at the device's next check-in (up to 5 min)..." : "Running on the device..."}</p>;
   if (r && !finished(r)) return <p className="text-sm text-warn">No result yet. The device may run it on its next check-in; try “Check result” later.</p>;
   return null;
 }
@@ -24,7 +24,7 @@ function useDiagnostic(deviceId, kind) {
   const toast = useToast();
   const [queued, setQueued] = useState(false);
   const fetcher = useCallback(() => api.get(`/devices/${deviceId}/diagnostics/${kind}`).then(r => r.data), [deviceId, kind]);
-  const poll = usePoll(fetcher, { interval: 3000, maxMs: kind === "speed" ? 150000 : 90000, done: finished });
+  const poll = usePoll(fetcher, { interval: 5000, maxMs: 420000, done: finished });
 
   async function run(body) {
     try {
@@ -60,7 +60,7 @@ export default function ToolsPanel({ deviceId }) {
           <Button variant="secondary" onClick={ping.check}>Check result</Button>
         </div>
         <div className="mt-4"><Status poll={ping.poll} queued={ping.queued} /></div>
-        {p?.state === "complete" && (
+        {p?.state === "complete" && !p.stale && (
           <dl className="mt-4 grid grid-cols-3 gap-4">
             <Field label="Received">{`${p.received ?? "?"} / ${p.sent ?? "?"}`}</Field>
             <Field label="Loss"><Badge tone={p.lossPct === 0 ? "ok" : p.lossPct < 20 ? "warn" : "bad"}>{p.lossPct}%</Badge></Field>
@@ -78,7 +78,7 @@ export default function ToolsPanel({ deviceId }) {
           <Button variant="secondary" onClick={speed.check}>Check result</Button>
         </div>
         <div className="mt-4"><Status poll={speed.poll} queued={speed.queued} /></div>
-        {s?.state === "complete" && (
+        {s?.state === "complete" && !s.stale && (
           <dl className="mt-4 grid grid-cols-3 gap-4">
             <Field label="Download"><span className="text-2xl font-extrabold">{s.mbps ?? "?"} Mbps</span></Field>
             <Field label="Data" value={s.bytes ? `${(s.bytes / 1e6).toFixed(1)} MB` : null} />

@@ -1,6 +1,19 @@
 const NBI = process.env.NBI_URL || "http://127.0.0.1:7557";
 
 const provisions = {
+  inform: `
+const daily = Date.now(86400000);
+for (const ms of ["InternetGatewayDevice.ManagementServer", "Device.ManagementServer"]) {
+  declare(ms + ".PeriodicInformEnable", {value: daily}, {value: true});
+  declare(ms + ".PeriodicInformInterval", {value: daily}, {value: 300});
+}
+`,
+  fullscan: `
+const now = Date.now();
+const root = declare("InternetGatewayDevice.DeviceInfo.SoftwareVersion", {value: 1}).size ? "InternetGatewayDevice" : "Device";
+for (let depth = 1; depth <= 8; depth++) declare(root + ".*".repeat(depth), {path: now, value: now});
+declare("Tags.fullscan", null, {value: false});
+`,
   refresh: `
 const now = Date.now();
 const igd = declare("InternetGatewayDevice.DeviceInfo.UpTime", {value: now}).size;
@@ -26,6 +39,8 @@ for (const b of bases) declare(b + ".*", {value: now});
 };
 
 const presets = {
+  fullscan: { channel: "fullscan", weight: 100, events: {}, precondition: "Tags.fullscan IS NOT NULL", configurations: [{ type: "provision", name: "fullscan", args: null }] },
+  "fullscan-bootstrap": { channel: "fullscan", weight: 100, events: { "0 BOOTSTRAP": true }, precondition: "", configurations: [{ type: "provision", name: "fullscan", args: null }] },
   refresh: { channel: "default", weight: 0, events: { "2 PERIODIC": true }, precondition: "", configurations: [{ type: "provision", name: "refresh", args: null }] },
   diagnostics: { channel: "diagnostics", weight: 0, events: { "8 DIAGNOSTICS COMPLETE": true }, precondition: "", configurations: [{ type: "provision", name: "diagnostics", args: null }] }
 };

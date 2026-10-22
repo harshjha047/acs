@@ -44,9 +44,13 @@ async function deleteDevice(genieacsDeviceId) {
   return res.status !== 404;
 }
 
+async function addTag(genieacsDeviceId, tag) {
+  await nbi.post(`/devices/${encodeURIComponent(genieacsDeviceId)}/tags/${encodeURIComponent(tag)}`);
+}
+
 const reboot = id => queueTask(id, { name: "reboot" });
 const refreshObject = (id, objectName, options) => queueTask(id, { name: "refreshObject", objectName }, options);
 const getParameterValues = (id, parameterNames, options) => queueTask(id, { name: "getParameterValues", parameterNames }, options);
 const setParameterValues = (id, parameterValues, options) => queueTask(id, { name: "setParameterValues", parameterValues }, options);
 
-module.exports = { listDevices, deleteDevice, getDevice, queueTask, queueTasks, getFaults, reboot, refreshObject, getParameterValues, setParameterValues };
+module.exports = { listDevices, deleteDevice, addTag, getDevice, queueTask, queueTasks, getFaults, reboot, refreshObject, getParameterValues, setParameterValues };

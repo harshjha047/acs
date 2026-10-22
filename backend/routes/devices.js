@@ -21,6 +21,7 @@ router.param("id", async (req, res, next, id) => {
   next();
 });
 
+const FULLSCAN_TAG = "fullscan";
 const SENSITIVE = /password|passphrase|presharedkey|wepkey|secret/i;
 const DEVICE_ID_PROJECTION = ["_deviceId", "_lastInform"];
 const HOST_RE = /^(?=.{1,253}$)(([a-z0-9-]{1,63}\.)*[a-z0-9-]{1,63}|\d{1,3}(\.\d{1,3}){3}|[0-9a-f:]+)$/i;
@@ -75,11 +76,11 @@ async function buildSummary(req, doc) {
       macAddress: p?.MACAddress?.toLowerCase() || undefined,
       wanIp: p?.ExternalIPAddress || undefined,
       softwareVersion: s.identity.softwareVersion || undefined,
-      rxPower: s.optical.rxPower.dbm ?? undefined,
-      rxGrade: s.optical.rxPower.grade,
+      ...(s.optical.rxPower.dbm !== null && { rxPower: s.optical.rxPower.dbm, rxGrade: s.optical.rxPower.grade }),
       informInterval: s.online.interval,
       lastSummaryAt: new Date()
-    }
+    },
+    ...(s.optical.rxPower.dbm === null && { $unset: { rxPower: 1, rxGrade: 1 } })
   });
   await learnProfile(req.device, profile, s);
   return { summary: s, profile };
@@ -195,13 +196,16 @@ router.post("/:id/refresh", async (req, res) => {
   const doc = await loadTree(req);
   const root = rootOf(doc);
   if (!root) return res.status(422).json({ error: "Data model root not found" });
-  const objects = scope === "full" ? [root] : ROOTS[root].refresh[scope].filter(p => get(doc, p) !== undefined);
+  const id = req.device.genieacsDeviceId;
   const details = await audit(req, "refresh", async () => {
-    const { outcome } = await genie.queueTasks(
-      req.device.genieacsDeviceId,
-      (objects.length ? objects : [root]).map(objectName => ({ name: "refreshObject", objectName })),
-      { timeout: scope === "full" ? 120000 : 30000 }
-    );
+    let outcome;
+    if (scope === "full") {
+      await genie.addTag(id, FULLSCAN_TAG);
+      ({ outcome } = await genie.getParameterValues(id, [`${root}.DeviceInfo.UpTime`], { timeout: 120000 }));
+    } else {
+      const objects = ROOTS[root].refresh[scope].filter(p => get(doc, p) !== undefined);
+      ({ outcome } = await genie.queueTasks(id, (objects.length ? objects : [root]).map(objectName => ({ name: "refreshObject", objectName })), { timeout: 30000 }));
+    }
     return { result: outcome, details: { outcome, scope } };
   });
   res.status(statusFor(details.outcome)).json(details);
@@ -218,19 +222,21 @@ async function startDiagnostic(req, kind, args) {
 }
 
 async function readDiagnostic(req, kind) {
-  let doc = await loadTree(req);
-  const paths = diag.resultPaths(doc, kind);
-  let refreshed = false;
-  if (paths.length) {
-    const { outcome } = await genie.getParameterValues(req.device.genieacsDeviceId, paths, { timeout: 5000 }).catch(() => ({ outcome: "failed" }));
-    if (outcome === "success") [doc, refreshed] = [await loadTree(req), true];
-  }
-  const last = await AuditLog.findOne({ device: req.device._id, action: kind === "ping" ? "ping" : "speed_test" }).sort({ timestamp: -1 }).lean();
+  const doc = await loadTree(req);
+  const action = kind === "ping" ? "ping" : "speed_test";
+  const last = await AuditLog.findOne({ device: req.device._id, action }).sort({ timestamp: -1 });
   const taskId = last?.details?.taskId;
   const faults = taskId ? await genie.getFaults(req.device.genieacsDeviceId).catch(() => []) : [];
   const fault = faults.find(f => f._id === `${req.device.genieacsDeviceId}:task_${taskId}`);
+  const result = diag.read(doc, kind);
+  const fresh = result.checkedAt && last && new Date(result.checkedAt) >= last.timestamp;
+  if (last?.result === "pending" && (fault || (fresh && ["complete", "error"].includes(result.state)))) {
+    last.result = fault || result.state === "error" ? "failed" : "success";
+    if (fault) last.errorMessage = fault.detail || fault.message;
+    await last.save();
+  }
   return {
-    ...diag.read(doc, kind), refreshed, requestedAt: last?.timestamp || null,
+    ...result, stale: !!last && !fresh, requestedAt: last?.timestamp || null,
     fault: fault ? { code: fault.code, message: fault.message, detail: fault.detail?.faultString || null } : null
   };
 }
