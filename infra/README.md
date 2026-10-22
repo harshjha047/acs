@@ -61,7 +61,7 @@ Simulator: add `sim` to `COMPOSE_PROFILES` (e.g. `COMPOSE_PROFILES=sim`).
     docker compose up -d
 
 - `speedtest/50MB.bin`: file the router downloads for the TR-143 speed test (`http://ACS_DOMAIN/speedtest/50MB.bin`).
-- `seedProvision.js` (re-run after each update): installs provisions/presets `inform` (300 s inform only; avoids commit loops on Realtek), `fullscan` (full tree read on `0 BOOTSTRAP` or when the dashboard tags the device), `refresh` (light refresh every periodic inform) and `diagnostics` (fetches ping/speed results on `8 DIAGNOSTICS COMPLETE`).
+- `seedProvision.js` (re-run after each update): installs provisions/presets `inform` (300 s inform only; avoids commit loops on Realtek), `fullscan` (full tree read on `0 BOOTSTRAP`, which otherwise leaves the tree mostly empty), `refresh` (light refresh every periodic inform) and `diagnostics` (fetches ping/speed results on `8 DIAGNOSTICS COMPLETE`).
 
 ## ACS authentication (`cwmp.auth`)
 

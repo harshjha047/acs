@@ -12,7 +12,6 @@ for (const ms of ["InternetGatewayDevice.ManagementServer", "Device.ManagementSe
 const now = Date.now();
 const root = declare("InternetGatewayDevice.DeviceInfo.SoftwareVersion", {value: 1}).size ? "InternetGatewayDevice" : "Device";
 for (let depth = 1; depth <= 8; depth++) declare(root + ".*".repeat(depth), {path: now, value: now});
-declare("Tags.fullscan", null, {value: false});
 `,
   refresh: `
 const now = Date.now();
@@ -39,13 +38,18 @@ for (const b of bases) declare(b + ".*", {value: now});
 };
 
 const presets = {
-  fullscan: { channel: "fullscan", weight: 100, events: {}, precondition: "Tags.fullscan IS NOT NULL", configurations: [{ type: "provision", name: "fullscan", args: null }] },
   "fullscan-bootstrap": { channel: "fullscan", weight: 100, events: { "0 BOOTSTRAP": true }, precondition: "", configurations: [{ type: "provision", name: "fullscan", args: null }] },
   refresh: { channel: "default", weight: 0, events: { "2 PERIODIC": true }, precondition: "", configurations: [{ type: "provision", name: "refresh", args: null }] },
   diagnostics: { channel: "diagnostics", weight: 0, events: { "8 DIAGNOSTICS COMPLETE": true }, precondition: "", configurations: [{ type: "provision", name: "diagnostics", args: null }] }
 };
 
+const obsoletePresets = ["fullscan"];
+
 (async () => {
+  for (const name of obsoletePresets) {
+    const res = await fetch(`${NBI}/presets/${name}`, { method: "DELETE" });
+    console.log(`preset ${name} removed`, res.status);
+  }
   for (const [name, script] of Object.entries(provisions)) {
     const res = await fetch(`${NBI}/provisions/${name}`, { method: "PUT", body: script.trim(), headers: { "Content-Type": "text/plain" } });
     console.log(`provision ${name}`, res.status);

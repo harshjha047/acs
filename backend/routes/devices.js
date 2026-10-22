@@ -21,7 +21,6 @@ router.param("id", async (req, res, next, id) => {
   next();
 });
 
-const FULLSCAN_TAG = "fullscan";
 const SENSITIVE = /password|passphrase|presharedkey|wepkey|secret/i;
 const DEVICE_ID_PROJECTION = ["_deviceId", "_lastInform"];
 const HOST_RE = /^(?=.{1,253}$)(([a-z0-9-]{1,63}\.)*[a-z0-9-]{1,63}|\d{1,3}(\.\d{1,3}){3}|[0-9a-f:]+)$/i;
@@ -200,8 +199,11 @@ router.post("/:id/refresh", async (req, res) => {
   const details = await audit(req, "refresh", async () => {
     let outcome;
     if (scope === "full") {
-      await genie.addTag(id, FULLSCAN_TAG);
-      ({ outcome } = await genie.getParameterValues(id, [`${root}.DeviceInfo.UpTime`], { timeout: 120000 }));
+      const names = leaves(doc[root], root).map(([path]) => path);
+      ({ outcome } = await genie.queueTasks(id, [
+        { name: "refreshObject", objectName: root },
+        { name: "getParameterValues", parameterNames: names }
+      ], { timeout: 120000 }));
     } else {
       const objects = ROOTS[root].refresh[scope].filter(p => get(doc, p) !== undefined);
       ({ outcome } = await genie.queueTasks(id, (objects.length ? objects : [root]).map(objectName => ({ name: "refreshObject", objectName })), { timeout: 30000 }));
