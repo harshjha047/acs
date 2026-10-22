@@ -13,7 +13,7 @@ const now = Date.now();
 const root = declare("InternetGatewayDevice.DeviceInfo.SoftwareVersion", {value: 1}).size ? "InternetGatewayDevice" : "Device";
 for (let depth = 1; depth <= 8; depth++) declare(root + ".*".repeat(depth), {path: now, value: now});
 `,
-  refresh: `
+  "acs-refresh": `
 const now = Date.now();
 const igd = declare("InternetGatewayDevice.DeviceInfo.UpTime", {value: now}).size;
 if (igd) {
@@ -47,11 +47,17 @@ for (const b of bases) declare(b + ".*", {value: now});
 const presets = {
   inform: { channel: "inform", weight: 0, events: { "0 BOOTSTRAP": true, "1 BOOT": true }, precondition: "", configurations: [{ type: "provision", name: "inform", args: null }] },
   "fullscan-bootstrap": { channel: "fullscan", weight: 100, events: { "0 BOOTSTRAP": true }, precondition: "", configurations: [{ type: "provision", name: "fullscan", args: null }] },
-  refresh: { channel: "default", weight: 0, events: { "2 PERIODIC": true }, precondition: "", configurations: [{ type: "provision", name: "refresh", args: null }] },
+  "acs-refresh": { channel: "default", weight: 0, events: { "2 PERIODIC": true }, precondition: "", configurations: [{ type: "provision", name: "acs-refresh", args: null }] },
   diagnostics: { channel: "diagnostics", weight: 0, events: { "8 DIAGNOSTICS COMPLETE": true }, precondition: "", configurations: [{ type: "provision", name: "diagnostics", args: null }] }
 };
 
-const obsoletePresets = ["fullscan"];
+const RESERVED = ["refresh", "value", "tag", "reboot", "reset", "download", "instances"];
+const obsoletePresets = ["fullscan", "refresh"];
+const obsoleteProvisions = ["refresh"];
+
+for (const name of Object.keys(provisions)) {
+  if (RESERVED.includes(name)) throw new Error(`Provision name "${name}" shadows a GenieACS built-in`);
+}
 
 async function waitForNbi(tries = 30) {
   for (let i = 1; i <= tries; i++) {
@@ -69,6 +75,10 @@ async function waitForNbi(tries = 30) {
   for (const name of obsoletePresets) {
     const res = await fetch(`${NBI}/presets/${name}`, { method: "DELETE" });
     console.log(`preset ${name} removed`, res.status);
+  }
+  for (const name of obsoleteProvisions) {
+    const res = await fetch(`${NBI}/provisions/${name}`, { method: "DELETE" });
+    console.log(`provision ${name} removed`, res.status);
   }
   for (const [name, script] of Object.entries(provisions)) {
     const res = await fetch(`${NBI}/provisions/${name}`, { method: "PUT", body: script.trim(), headers: { "Content-Type": "text/plain" } });

@@ -199,11 +199,7 @@ router.post("/:id/refresh", async (req, res) => {
   const details = await audit(req, "refresh", async () => {
     let outcome;
     if (scope === "full") {
-      const names = leaves(doc[root], root).map(([path]) => path);
-      ({ outcome } = await genie.queueTasks(id, [
-        { name: "refreshObject", objectName: root },
-        ...(names.length ? [{ name: "getParameterValues", parameterNames: names }] : [])
-      ], { timeout: 120000 }));
+      ({ outcome } = await genie.refreshObject(id, root, { timeout: 120000 }));
     } else {
       const objects = ROOTS[root].refresh[scope].filter(p => get(doc, p) !== undefined);
       ({ outcome } = await genie.queueTasks(id, (objects.length ? objects : [root]).map(objectName => ({ name: "refreshObject", objectName })), { timeout: 30000 }));

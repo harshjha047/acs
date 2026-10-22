@@ -61,7 +61,7 @@ Simulator: add `sim` to `COMPOSE_PROFILES` (e.g. `COMPOSE_PROFILES=sim`).
     docker compose up -d
 
 - `speedtest/50MB.bin`: file the router downloads for the TR-143 speed test (`http://ACS_DOMAIN/speedtest/50MB.bin`).
-- `seedProvision.js` (re-run after each update): installs provisions/presets `inform` (enables 300 s periodic inform on `0 BOOTSTRAP` / `1 BOOT` only, so a CPE that rejects or rewrites the value cannot cause a set loop on every inform), `fullscan` (full tree read on `0 BOOTSTRAP`, which otherwise leaves the tree mostly empty), `refresh` (light refresh every periodic inform) and `diagnostics` (fetches ping/speed results on `8 DIAGNOSTICS COMPLETE`).
+- `seedProvision.js` (re-run after each update): installs provisions/presets `inform` (300 s periodic inform on `0 BOOTSTRAP` / `1 BOOT`), `fullscan` (full tree read on `0 BOOTSTRAP`), `acs-refresh` (light refresh every periodic inform) and `diagnostics` (fetches ping/speed results on `8 DIAGNOSTICS COMPLETE`). Never name a provision `refresh`, `value`, `tag`, `reboot`, `reset`, `download` or `instances`: a user provision with a built-in's name replaces it, and every NBI task (`refreshObject`, `getParameterValues`) then runs the wrong script. The script refuses those names and deletes the old `refresh` provision/preset.
 
 ## ACS authentication (`cwmp.auth`)
 
@@ -96,7 +96,7 @@ Off-box: set `BACKUP_RSYNC_TARGET=user@host:/path/` (key-based SSH). Restore:
 
 ## CPE quirks (`cwmp.gpnNextLevel`, `cwmp.maxCommitIterations`)
 
-Per-OUI GenieACS tuning lives in `backend/scripts/tuneCwmp.js` (`QUIRKS`). Realtek `00177C` walks the tree level by level (NextLevel=true) because its NextLevel=false responses miss sub-objects.
+Per-OUI GenieACS tuning lives in `backend/scripts/tuneCwmp.js` (`QUIRKS`). Not applied by default. The incomplete Realtek tree turned out to be the `refresh` provision name clash, not GPN behaviour; use only if a model is proven to need it.
 
     docker compose exec api node scripts/tuneCwmp.js        # --off to remove
     docker compose restart genieacs-cwmp
