@@ -86,6 +86,8 @@ test("health: grading", () => {
   assert.equal(health.gradeBackup(undefined, now).status, "warn");
   assert.equal(health.gradeBackup(null, now).status, "bad");
   assert.equal(health.gradeBackup({ name: "m", mtime: now - 30 * 3600e3, size: 1e6 }, now).status, "warn");
+  assert.equal(health.gradeBackup({ name: "m", mtime: now - 3600e3, size: 1e6 }, now).status, "warn");
+  assert.equal(health.gradeBackup({ name: "m", mtime: now - 3600e3, size: 1e6 }, now, now - 3600e3).status, "ok");
   assert.equal(health.gradeDisk(4).status, "bad");
   assert.equal(health.worst([{ status: "ok" }, { status: "warn" }]), "warn");
   assert.equal(health.overall({ database: { status: "ok" }, backup: { status: "bad" } }), "warn");

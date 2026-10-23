@@ -2,12 +2,12 @@
 set -euo pipefail
 cd "$(dirname "$0")"
 env_get() { sed -n "s/^$1=//p" .env | tail -1 | sed -e 's/^["'\'']//' -e 's/["'\'']$//'; }
-for k in MONGO_USER MONGO_PASS BACKUP_DIR BACKUP_KEEP_DAYS BACKUP_RSYNC_TARGET; do
+for k in MONGO_USER MONGO_PASS BACKUP_DIR BACKUP_KEEP_DAYS BACKUP_RSYNC_TARGET BACKUP_RCLONE_TARGET BACKUP_REMOTE_KEEP_DAYS; do
   [ -n "${!k:-}" ] || export "$k=$(env_get "$k")"
 done
 
 DIR="${BACKUP_DIR:-/opt/acs/backups}"
-KEEP="${BACKUP_KEEP_DAYS:-14}"
+KEEP="${BACKUP_KEEP_DAYS:-3}"
 FILE="$DIR/mongo-$(date +%F-%H%M).archive.gz"
 mkdir -p "$DIR"
 
@@ -18,5 +18,10 @@ find "$DIR" -name 'mongo-*.archive.gz' -mtime +"$KEEP" -delete
 
 if [ -n "${BACKUP_RSYNC_TARGET:-}" ]; then
   rsync -a --delete -e "ssh -o BatchMode=yes" "$DIR/" "$BACKUP_RSYNC_TARGET"
+fi
+if [ -n "${BACKUP_RCLONE_TARGET:-}" ]; then
+  rclone copy "$FILE" "$BACKUP_RCLONE_TARGET" --retries 5 --low-level-retries 20
+  rclone delete "$BACKUP_RCLONE_TARGET" --min-age "${BACKUP_REMOTE_KEEP_DAYS:-90}d" --include 'mongo-*.archive.gz'
+  date -u +%FT%TZ > "$DIR/.offbox-ok"
 fi
 echo "backup ok: $FILE ($(du -h "$FILE" | cut -f1))"

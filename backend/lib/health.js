@@ -23,11 +23,13 @@ function gradeMonitor(st, intervalSec, now = Date.now(), processUptimeSec = proc
   return check(age > intervalSec * 2 ? "warn" : "ok", `${st.devices} devices in ${st.durationMs} ms, ${Math.round(age)}s ago`);
 }
 
-function gradeBackup(latest, now = Date.now()) {
+function gradeBackup(latest, now = Date.now(), offbox = null) {
   if (latest === undefined) return check("warn", "Backup folder not mounted");
   if (!latest) return check("bad", "No backups found");
   const ageH = (now - latest.mtime) / H;
-  return check(ageH > 50 ? "bad" : ageH > 26 ? "warn" : "ok", `${latest.name}, ${ageH.toFixed(1)} h old, ${(latest.size / 1e6).toFixed(1)} MB`);
+  const offH = offbox ? (now - offbox) / H : null;
+  const status = ageH > 50 ? "bad" : ageH > 26 || offH === null || offH > 50 ? "warn" : "ok";
+  return check(status, `${latest.name}, ${ageH.toFixed(1)} h old, ${(latest.size / 1e6).toFixed(1)} MB · ${offH === null ? "no off-box copy" : `off-box ${offH.toFixed(1)} h ago`}`);
 }
 
 const gradeDisk = freePct => check(freePct < 5 ? "bad" : freePct < 15 ? "warn" : "ok", `${freePct.toFixed(1)}% free`);
@@ -55,7 +57,9 @@ async function latestBackup(dir) {
     return undefined;
   }
   const stats = await Promise.all(names.map(async name => ({ name, ...(await fs.stat(path.join(dir, name))) })));
-  return stats.sort((a, b) => b.mtimeMs - a.mtimeMs)[0] || null;
+  const latest = stats.sort((a, b) => b.mtimeMs - a.mtimeMs)[0] || null;
+  const offbox = await fs.stat(path.join(dir, ".offbox-ok")).then(s => s.mtimeMs, () => null);
+  return latest && { ...latest, offbox };
 }
 
 async function report() {
@@ -83,7 +87,7 @@ async function report() {
     monitor: gradeMonitor(monitor.status, interval),
     faults: faults.error ? check("warn", "Unknown") : check(faults.value.length > 50 ? "warn" : "ok", `${faults.value.length} open`, { count: faults.value.length }),
     taskQueue: tasks.error ? check("warn", "Unknown") : check(tasks.value.length > 500 ? "warn" : "ok", `${tasks.value.length} queued`, { count: tasks.value.length }),
-    backup: gradeBackup(backup && { name: backup.name, mtime: backup.mtimeMs, size: backup.size }),
+    backup: gradeBackup(backup && { name: backup.name, mtime: backup.mtimeMs, size: backup.size }, Date.now(), backup?.offbox),
     disk: disk ? gradeDisk((disk.bavail / disk.blocks) * 100) : check("warn", "Unknown"),
     memory: gradeMemory(usedMem)
   };

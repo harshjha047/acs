@@ -118,3 +118,9 @@ Per-OUI GenieACS tuning lives in `backend/scripts/tuneCwmp.js` (`QUIRKS`). Not a
     rm docker-compose.override.yml && docker compose up -d genieacs-cwmp
 
 The file contains every SOAP message, including PPPoE usernames; delete it after use.
+
+## Off-box backups (Google Drive via rclone)
+
+`backup.sh` dumps Mongo to `BACKUP_DIR` (kept `BACKUP_KEEP_DAYS`, default 3), copies it to `BACKUP_RCLONE_TARGET` (kept `BACKUP_REMOTE_KEEP_DAYS`, default 90) and touches `BACKUP_DIR/.offbox-ok` (shown on `/system`). Backups contain device configs with plaintext secrets, so the target is an rclone `crypt` remote over a Drive remote (scope `drive.file`). Keep the crypt passwords outside the VPS too: without them the backups cannot be restored.
+
+Restore: `rclone copy gdrive-crypt:mongo-<date>.archive.gz /tmp/ && docker compose exec -T mongo mongorestore --archive --gzip --drop -u "$MONGO_USER" -p "$MONGO_PASS" --authenticationDatabase admin < /tmp/mongo-<date>.archive.gz`
