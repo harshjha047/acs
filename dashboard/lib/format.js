@@ -53,4 +53,7 @@ export const ACTION_LABEL = {
 
 export const PROV_TONE = { pending: "warn", queued: "warn", applied: "ok", failed: "bad" };
 export const PROV_LABEL = { pending: "Provisioning: waiting for data", queued: "Provisioning: queued", applied: "Provisioned", failed: "Provisioning failed" };
+export const FW_TONE = { queued: "warn", sent: "warn", downloading: "warn", rebooting: "warn", applied: "ok", failed: "bad", skipped: "muted" };
+export const FW_LABEL = { queued: "Queued", sent: "Waiting for check-in", downloading: "Downloading", rebooting: "Rebooting", applied: "Applied", failed: "Failed", skipped: "Skipped" };
+export const ROLLOUT_TONE = { draft: "muted", running: "warn", paused: "warn", halted: "bad", done: "ok" };
 export const input = "h-11 w-full rounded-control border border-line bg-white px-4 text-sm outline-none focus:border-plum";

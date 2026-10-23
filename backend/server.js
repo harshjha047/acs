@@ -26,6 +26,7 @@ app.use("/api/profiles", require("./routes/profiles"));
 app.use("/api/users", require("./routes/users"));
 app.use("/api/templates", require("./routes/templates"));
 app.use("/api/preregistrations", require("./routes/preregistrations"));
+app.use("/api/firmware", require("./routes/firmware"));
 app.use("/api", require("./routes/monitor"));
 
 app.use((req, res) => res.status(404).json({ error: "Not found" }));
@@ -40,7 +41,7 @@ const port = process.env.PORT || 4000;
 mongoose.connect(process.env.MONGO_URI)
   .then(() => {
     app.listen(port, () => console.log(`API on :${port}`));
-    require("./lib/monitor").start({ after: require("./lib/provisioner").tick });
+    require("./lib/monitor").start({ after: [require("./lib/provisioner").tick, require("./lib/firmwareRunner").tick] });
   })
   .catch(err => {
     console.error("Mongo connection failed:", err.message);

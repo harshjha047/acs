@@ -16,6 +16,7 @@ x-genieacs: &genieacs
     GENIEACS_EXT_DIR: /opt/genieacs/ext
     GENIEACS_UI_JWT_SECRET: ${GENIEACS_UI_JWT_SECRET}
     GENIEACS_FORWARDED_HEADER: 172.16.0.0/12
+    GENIEACS_FS_URL_PREFIX: http://${ACS_DOMAIN}/fw/
   volumes:
     - ./ext:/opt/genieacs/ext:ro
   depends_on:

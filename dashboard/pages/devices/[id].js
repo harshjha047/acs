@@ -20,6 +20,7 @@ import ParamsTable from "../../components/device/ParamsTable";
 import TrendsPanel from "../../components/device/TrendsPanel";
 import CustomerLink from "../../components/device/CustomerLink";
 import ProvisionCard from "../../components/device/ProvisionCard";
+import FirmwareCard from "../../components/device/FirmwareCard";
 
 const TABS = [
   ["overview", "Overview"],
@@ -161,6 +162,7 @@ export default function DeviceDetail() {
                   </dl>
                 </Card>
                 <ProvisionCard deviceId={id} role={role} />
+                {(role === "noc" || role === "admin") && <FirmwareCard deviceId={id} serial={device?.serialNumber} role={role} />}
               </div>
             </div>
           )}

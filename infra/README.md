@@ -131,3 +131,9 @@ Restore: `rclone copy gdrive-crypt:mongo-<date>.archive.gz /tmp/ && docker compo
 - "Apply to every new device" only for templates that do not touch Wi-Fi, and only for devices first seen after it was switched on. Do not enable it before the OLT pushes the ACS URL fleet-wide unless the network team approves the parameters.
 - Bulk (device list checkboxes): tag/untag (noc/admin), apply template (admin, SSID pattern must contain a token), reboot (admin, ≤ 50). Each device gets its own audit entry with a shared `bulkId`.
 - First live test: pre-register the simulator (`202BC1-BM632w-000001`) or a spare ONT, never a customer ONU without approval.
+
+## Firmware (Batch 6)
+- CPEs download images from `http://$ACS_DOMAIN/fw/<file>` (Caddy → genieacs-fs). `GENIEACS_FS_URL_PREFIX` is set in compose.
+- Optional API env: `FIRMWARE_MAX_MB` (256), `FIRMWARE_WINDOW_TZ` (Asia/Kolkata), `FIRMWARE_MAX_SEND` (20/min), `FIRMWARE_APPLY_TIMEOUT_MIN` (60), `FIRMWARE_PICKUP_TIMEOUT_H` (24).
+- Enable a model: `docker compose exec api node scripts/setProfile.js "<Mfr>" "<Class>" --firmware on`.
+- Procedure and recovery: `docs/Firmware-Runbook.md`.

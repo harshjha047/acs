@@ -52,9 +52,34 @@ async function getTasks(genieacsDeviceId) {
   return data;
 }
 
+async function deleteTask(taskId) {
+  const res = await nbi.delete(`/tasks/${encodeURIComponent(taskId)}`, { validateStatus: s => s < 500 });
+  return res.status < 400;
+}
+
+async function putFile(fileName, body, { fileType, oui, productClass, version, length }) {
+  const res = await nbi.put(`/files/${encodeURIComponent(fileName)}`, body, {
+    headers: { "Content-Type": "application/octet-stream", fileType, oui: oui || "", productClass, version, ...(length && { "Content-Length": length }) },
+    maxBodyLength: Infinity, maxContentLength: Infinity, timeout: 15 * 60000, validateStatus: () => true
+  });
+  if (res.status >= 300) throw Object.assign(new Error(`NBI file upload ${res.status}: ${typeof res.data === "string" ? res.data : res.statusText}`), { status: 502 });
+}
+
+async function deleteFile(fileName) {
+  const res = await nbi.delete(`/files/${encodeURIComponent(fileName)}`, { validateStatus: s => s < 500 });
+  return res.status < 400;
+}
+
+async function listFiles(query = {}) {
+  const { data } = await nbi.get("/files", { params: { query: JSON.stringify(query) } });
+  return data;
+}
+
+const download = (id, fileName, fileType, options) => queueTask(id, { name: "download", file: fileName, fileName, fileType }, options);
+const factoryReset = (id, options) => queueTask(id, { name: "factoryReset" }, options);
 const reboot = id => queueTask(id, { name: "reboot" });
 const refreshObject = (id, objectName, options) => queueTask(id, { name: "refreshObject", objectName }, options);
 const getParameterValues = (id, parameterNames, options) => queueTask(id, { name: "getParameterValues", parameterNames }, options);
 const setParameterValues = (id, parameterValues, options) => queueTask(id, { name: "setParameterValues", parameterValues }, options);
 
-module.exports = { listDevices, deleteDevice, getTasks, getDevice, queueTask, queueTasks, getFaults, reboot, refreshObject, getParameterValues, setParameterValues };
+module.exports = { listDevices, deleteDevice, getTasks, deleteTask, putFile, deleteFile, listFiles, download, factoryReset, getDevice, queueTask, queueTasks, getFaults, reboot, refreshObject, getParameterValues, setParameterValues };

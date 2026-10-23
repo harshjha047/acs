@@ -9,6 +9,10 @@
 		}
 		reverse_proxy api:4000
 	}
+	handle /fw/* {
+		uri strip_prefix /fw
+		reverse_proxy genieacs-fs:7567
+	}
 	handle /speedtest/* {
 		uri strip_prefix /speedtest
 		root * /srv/speedtest

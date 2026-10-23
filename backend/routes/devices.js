@@ -39,13 +39,15 @@ const DUPLICATE = {
   reboot: t => t.name === "reboot",
   refresh: t => t.name === "refreshObject" || t.name === "getParameterValues",
   wifi: t => t.name === "setParameterValues" && t.parameterValues?.some(([p]) => /WLANConfiguration|\.WiFi\./.test(p)),
-  diagnostic: t => t.name === "setParameterValues" && t.parameterValues?.some(([p]) => p.endsWith(".DiagnosticsState"))
+  diagnostic: t => t.name === "setParameterValues" && t.parameterValues?.some(([p]) => p.endsWith(".DiagnosticsState")),
+  reset: t => t.name === "factoryReset" || t.name === "download" || t.name === "reboot"
 };
 const DUPLICATE_MSG = {
   reboot: "A reboot is already queued for this device. It runs at the next check-in.",
   refresh: "A refresh is already queued for this device. It runs at the next check-in.",
   wifi: "A Wi-Fi change is already waiting for this device. It applies at the next check-in.",
-  diagnostic: "A test is already queued for this device. It runs at the next check-in."
+  diagnostic: "A test is already queued for this device. It runs at the next check-in.",
+  reset: "A reboot, reset or firmware download is already queued for this device."
 };
 
 function once(kind) {
@@ -523,6 +525,59 @@ router.post("/:id/reboot", requireRole("noc", "admin"), once("reboot"), async (r
     return { result: outcome, details: { outcome, reason, nbiReason, taskId: task?._id } };
   });
   res.status(statusFor(details.outcome)).json(details);
+});
+
+const FirmwareRelease = require("../models/FirmwareRelease");
+const FirmwareJob = require("../models/FirmwareJob");
+const fw = require("../lib/firmware");
+const fwRunner = require("../lib/firmwareRunner");
+
+router.get("/:id/firmware", async (req, res) => {
+  const d = req.device;
+  const [profile, jobs, releases, resets] = await Promise.all([
+    fwRunner.profileOf(d),
+    FirmwareJob.find({ device: d._id }).sort({ createdAt: -1 }).limit(10).populate("release", "version fileName").populate("requestedBy", "name").lean(),
+    FirmwareRelease.find({ manufacturer: d.manufacturer, productClass: d.productClass, status: { $ne: "retired" } }).sort({ createdAt: -1 }).lean(),
+    AuditLog.find({ device: d._id, action: "factory_reset" }).sort({ timestamp: -1 }).limit(3).populate("user", "name").lean()
+  ]);
+  res.json({
+    softwareVersion: d.softwareVersion || null,
+    supported: !!profile?.supportsFirmwareUpgrade,
+    active: jobs.find(j => fw.ACTIVE.includes(j.state)) || null,
+    jobs,
+    releases: releases.map(r => ({ _id: r._id, version: r.version, status: r.status, fileSize: r.fileSize, releaseNotes: r.releaseNotes, ...fw.eligibility(d, r, { profile }) })),
+    resets: resets.map(l => ({ at: l.timestamp, result: l.result, user: l.user?.name, details: l.details, error: l.errorMessage }))
+  });
+});
+
+router.post("/:id/firmware", requireRole("admin"), once("reset"), async (req, res) => {
+  const reason = reasonOf(req);
+  if (!reason) return res.status(400).json({ error: "Reason is required" });
+  if (!isValidObjectId(req.body?.releaseId)) return res.status(400).json({ error: "Pick a release" });
+  const release = await FirmwareRelease.findById(req.body.releaseId).lean();
+  if (!release) return res.status(404).json({ error: "Release not found" });
+  if (await FirmwareJob.exists({ device: req.device._id, state: { $in: fw.ACTIVE } })) return res.status(409).json({ error: "A firmware upgrade is already in progress for this device" });
+  const check = fw.eligibility(req.device, release, { profile: await fwRunner.profileOf(req.device), hardwareVersion: await fwRunner.hardwareVersion(req.device) });
+  if (!check.ok) return res.status(422).json({ error: check.reason });
+  const job = await FirmwareJob.create({ release: release._id, device: req.device._id, requestedBy: req.user.id });
+  const r = await fwRunner.send({ ...job.toObject(), reason }, release, { connectionRequest: true, user: req.user.id });
+  if (r.state === "failed" || r.state === "skipped") return res.status(r.state === "failed" ? 502 : 422).json({ error: r.error, state: r.state });
+  res.status(202).json({ jobId: job._id, ...r });
+});
+
+router.post("/:id/factory-reset", requireRole("admin"), once("reset"), async (req, res) => {
+  const reason = reasonOf(req);
+  if (!reason) return res.status(400).json({ error: "Reason is required" });
+  if (String(req.body?.confirmSerial || "").trim().toLowerCase() !== String(req.device.serialNumber).toLowerCase()) {
+    return res.status(400).json({ error: "Type the device serial number exactly to confirm" });
+  }
+  if (await FirmwareJob.exists({ device: req.device._id, state: { $in: fw.ACTIVE } })) return res.status(409).json({ error: "A firmware upgrade is in progress for this device" });
+  const reprovision = !!req.body?.reprovision && !!req.device.provisioning?.template;
+  const details = await audit(req, "factory_reset", async () => {
+    const { outcome, task } = await genie.factoryReset(req.device.genieacsDeviceId, { timeout: 8000 });
+    return { result: "pending", details: { outcome, reason, reprovision, taskId: task?._id, ...(outcome === "success" && { executedAt: new Date() }) } };
+  });
+  res.status(202).json(details);
 });
 
 router.delete("/:id", requireRole("admin"), async (req, res) => {
