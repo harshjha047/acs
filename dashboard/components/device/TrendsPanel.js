@@ -43,8 +43,8 @@ export default function TrendsPanel({ deviceId }) {
           <Card title="Optical power (dBm, green = normal range)">
             {has("rx") || has("tx") ? (
               <div className="grid gap-4">
-                {has("rx") && <LineChart points={pts} series={[{ key: "rx", label: "Rx" }]} unit="dBm" markers={markers} band={[-25, -8]} />}
-                {has("tx") && <LineChart points={pts} series={[{ key: "tx", label: "Tx", color: "var(--color-plum)" }]} unit="dBm" markers={markers} band={[0.5, 5]} />}
+                {has("rx") && <LineChart points={pts} series={[{ key: "rx", label: "Rx" }]} unit="dBm" markers={markers} band={[-25, -8]} minSpan={3} />}
+                {has("tx") && <LineChart points={pts} series={[{ key: "tx", label: "Tx", color: "var(--color-plum)" }]} unit="dBm" markers={markers} band={[0.5, 5]} minSpan={2} />}
               </div>
             ) : <p className="text-sm text-ink-2">Not reported.</p>}
           </Card>
@@ -52,10 +52,10 @@ export default function TrendsPanel({ deviceId }) {
             {has("inKbps") ? <LineChart points={pts} series={[{ key: "inKbps", label: "Down" }, { key: "outKbps", label: "Up" }]} fmt={kbps} markers={markers} /> : empty("Device does not report WAN byte counters.")}
           </Card>
           <Card title="FEC errors per interval">
-            {has("fecDelta") ? <LineChart points={pts} series={[{ key: "fecDelta", label: "FEC" }]} markers={markers} /> : empty("Not reported.")}
+            {has("fecDelta") ? <LineChart points={pts} series={[{ key: "fecDelta", label: "FEC" }]} markers={markers} minSpan={10} /> : empty("Not reported.")}
           </Card>
           <Card title="Module temperature (°C)">
-            {has("temp") ? <LineChart points={pts} series={[{ key: "temp", label: "Temp" }]} unit="°C" markers={markers} /> : <p className="text-sm text-ink-2">Not reported.</p>}
+            {has("temp") ? <LineChart points={pts} series={[{ key: "temp", label: "Temp" }]} unit="°C" markers={markers} minSpan={5} /> : <p className="text-sm text-ink-2">Not reported.</p>}
           </Card>
         </div>
       )}

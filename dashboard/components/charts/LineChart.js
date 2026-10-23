@@ -4,15 +4,15 @@ const W = 600;
 const H = 140;
 const COLORS = ["var(--color-magenta)", "var(--color-plum)", "var(--color-amber)"];
 
-export default function LineChart({ points, series, unit = "", markers = [], band, fmt = v => v, height = H }) {
+export default function LineChart({ points, series, unit = "", markers = [], band, fmt = v => v, height = H, minSpan = 1 }) {
   const [hover, setHover] = useState(null);
   const { x, y, min, max, t0, t1 } = useMemo(() => {
     const vals = points.flatMap(p => series.map(s => p[s.key])).filter(v => v !== null && v !== undefined);
     let lo = Math.min(...vals), hi = Math.max(...vals);
     if (!vals.length) { lo = 0; hi = 1; }
-    if (lo === hi) { lo -= 1; hi += 1; }
-    const pad = (hi - lo) * 0.1;
     const floor = lo >= 0 ? 0 : -Infinity;
+    if (hi - lo < minSpan) { const mid = (hi + lo) / 2; lo = mid - minSpan / 2; hi = mid + minSpan / 2; }
+    const pad = (hi - lo) * 0.1;
     const t0 = points.length ? new Date(points[0].at).getTime() : 0;
     const t1 = points.length ? new Date(points.at(-1).at).getTime() : 1;
     return {
@@ -20,7 +20,7 @@ export default function LineChart({ points, series, unit = "", markers = [], ban
       x: at => ((new Date(at).getTime() - t0) / Math.max(1, t1 - t0)) * W,
       y: v => height - ((v - Math.max(floor, lo - pad)) / (hi + pad - Math.max(floor, lo - pad))) * height
     };
-  }, [points, series, band, height]);
+  }, [points, series, height, minSpan]);
 
   if (!points.length) return <p className="py-6 text-sm text-ink-2">No data yet.</p>;
 
