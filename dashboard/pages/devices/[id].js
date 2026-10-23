@@ -19,6 +19,7 @@ import ReadinessPanel from "../../components/device/ReadinessPanel";
 import ParamsTable from "../../components/device/ParamsTable";
 import TrendsPanel from "../../components/device/TrendsPanel";
 import CustomerLink from "../../components/device/CustomerLink";
+import ProvisionCard from "../../components/device/ProvisionCard";
 
 const TABS = [
   ["overview", "Overview"],
@@ -159,6 +160,7 @@ export default function DeviceDetail() {
                     <Field label="Wi-Fi on" value={summary.wifi.filter(w => w.enabled).map(w => w.ssid).join(", ") || (summary.wifi.some(w => w.enabled === null) ? "unknown" : "none")} />
                   </dl>
                 </Card>
+                <ProvisionCard deviceId={id} role={role} />
               </div>
             </div>
           )}

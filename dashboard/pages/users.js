@@ -11,8 +11,8 @@ import useAction from "../lib/useAction";
 
 const ROLES = [
   ["agent", "Agent: view, refresh, diagnostics, Wi-Fi"],
-  ["noc", "NOC: agent + reboot"],
-  ["admin", "Admin: everything + users, remove devices"]
+  ["noc", "NOC: agent + reboot, pre-register devices, tags"],
+  ["admin", "Admin: everything + users, templates, apply templates, bulk reboot, remove devices"]
 ];
 const input = "h-11 w-full rounded-control border border-line bg-white px-4 text-sm outline-none focus:border-plum";
 const empty = { name: "", email: "", password: "", role: "agent" };

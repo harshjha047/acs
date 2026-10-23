@@ -18,6 +18,9 @@ const DeviceEvent = require("../models/DeviceEvent");
 const { series } = require("../lib/telemetry");
 const { capabilities } = require("../lib/capabilities");
 const sink = require("../lib/uploadSink");
+const Template = require("../models/ProvisioningTemplate");
+const provisioner = require("../lib/provisioner");
+const prov = require("../lib/provisioning");
 
 router.use(requireAuth);
 
@@ -56,6 +59,74 @@ function once(kind) {
     next();
   };
 }
+
+const BULK = {
+  tag: { roles: ["noc", "admin"], max: 500 },
+  untag: { roles: ["noc", "admin"], max: 500 },
+  reboot: { roles: ["admin"], max: 50, reason: true },
+  provision: { roles: ["admin"], max: 200, reason: true }
+};
+
+async function pool(items, size, fn) {
+  const out = [];
+  for (let i = 0; i < items.length; i += size) out.push(...(await Promise.all(items.slice(i, i + size).map(fn))));
+  return out;
+}
+
+router.post("/bulk", async (req, res) => {
+  const { action, ids, tag, templateId } = req.body || {};
+  const spec = BULK[action];
+  if (!spec) return res.status(400).json({ error: "Unknown bulk action" });
+  if (!spec.roles.includes(req.user.role)) return res.status(403).json({ error: "Not allowed for your role" });
+  const list = [...new Set((Array.isArray(ids) ? ids : []).map(String))].filter(isValidObjectId);
+  if (!list.length) return res.status(400).json({ error: "Select at least one device" });
+  if (list.length > spec.max) return res.status(400).json({ error: `At most ${spec.max} devices per ${action}` });
+  const reason = reasonOf(req);
+  if (spec.reason && !reason) return res.status(400).json({ error: "Reason is required" });
+
+  const devices = await Device.find({ _id: { $in: list }, removedAt: null });
+  const bulkId = `bulk-${Date.now().toString(36)}`;
+  const found = new Set(devices.map(d => String(d._id)));
+  const results = list.filter(id => !found.has(id)).map(id => ({ id, outcome: "failed", error: "Device not found" }));
+  const row = (d, outcome, error) => ({ id: String(d._id), serialNumber: d.serialNumber, outcome, ...(error && { error }) });
+
+  if (action === "tag" || action === "untag") {
+    const [t] = prov.normTags([tag]);
+    if (!t) return res.status(400).json({ error: "Tag is required" });
+    await Device.updateMany({ _id: { $in: devices.map(d => d._id) } }, action === "tag" ? { $addToSet: { tags: t } } : { $pull: { tags: t } });
+    await AuditLog.insertMany(devices.map(d => ({ user: req.user.id, device: d._id, action: "tag_update", result: "success", details: { bulkId, op: action, tag: t } })));
+    results.push(...devices.map(d => row(d, "done")));
+  }
+
+  if (action === "reboot") {
+    results.push(...(await pool(devices, 5, async d => {
+      const tasks = await genie.getTasks(d.genieacsDeviceId).catch(() => []);
+      if (tasks.some(DUPLICATE.reboot)) return row(d, "skipped", "Reboot already queued");
+      const log = await AuditLog.create({ user: req.user.id, device: d._id, action: "reboot", details: { reason, bulkId } });
+      try {
+        const { outcome, task } = await genie.queueTask(d.genieacsDeviceId, { name: "reboot" }, { connectionRequest: false });
+        await AuditLog.updateOne({ _id: log._id }, { $set: { result: outcome, "details.outcome": outcome, "details.taskId": task?._id } });
+        return row(d, "queued");
+      } catch (err) {
+        await AuditLog.updateOne({ _id: log._id }, { $set: { result: "failed", errorMessage: err.message } });
+        return row(d, "failed", err.message);
+      }
+    })));
+  }
+
+  if (action === "provision") {
+    if (!isValidObjectId(templateId)) return res.status(400).json({ error: "Pick a template" });
+    const template = await Template.findById(templateId).lean();
+    if (!template?.isActive) return res.status(400).json({ error: "Template not found or inactive" });
+    if (template.wifi?.ssid && !/\{\w+\}/.test(template.wifi.ssid)) return res.status(400).json({ error: "This template sets a fixed SSID; bulk apply needs a pattern with tokens such as {serial4}" });
+    for (const d of devices) {
+      results.push(await provisioner.request(d, { template, user: req.user.id }).then(() => row(d, "queued"), err => row(d, "skipped", err.message)));
+    }
+  }
+
+  const count = k => results.filter(r => r.outcome === k).length;
+  res.json({ bulkId, action, reason: reason || undefined, results, summary: { done: count("done") + count("queued"), skipped: count("skipped"), failed: count("failed") } });
+});
 
 router.param("id", async (req, res, next, id) => {
   if (!isValidObjectId(id)) return res.status(400).json({ error: "Invalid device id" });
@@ -142,6 +213,8 @@ router.get("/", async (req, res) => {
   if (req.query.state === "offline") filter.online = false;
   if (req.query.state === "lowrx") filter.rxGrade = { $in: ["warn", "bad"] };
   if (req.query.state === "alerts") filter._id = { $in: await Alert.distinct("device", { open: true }) };
+  if (req.query.tag) filter.tags = String(req.query.tag).toLowerCase();
+  if (["pending", "queued", "applied", "failed"].includes(req.query.prov)) filter["provisioning.state"] = req.query.prov;
   const devices = await Device.find(filter, "-mon").populate("customer", "name phone accountId").sort({ lastInformAt: -1 }).limit(500).lean();
   const alerts = await Alert.find({ open: true, device: { $in: devices.map(d => d._id) } }, "device type severity").lean();
   const byDevice = Map.groupBy(alerts, a => String(a.device));
@@ -153,6 +226,44 @@ router.get("/:id", async (req, res) => {
   const alerts = await Alert.find({ device: req.device._id, open: true }).sort({ openedAt: -1 }).lean();
   const { mon, ...rest } = device.toObject();
   res.json({ ...rest, alerts });
+});
+
+router.get("/:id/provisioning", async (req, res) => {
+  const d = await Device.findById(req.device._id).select("+provisioning.overrides")
+    .populate("provisioning.template", "name").populate("provisioning.requestedBy", "name").lean();
+  const { overrides, ...rest } = d.provisioning || {};
+  res.json({ ...rest, tags: d.tags || [], hasPassword: !!overrides?.password });
+});
+
+router.get("/:id/provisioning/secret", requireRole("noc", "admin"), async (req, res) => {
+  const d = await Device.findById(req.device._id, "+provisioning.overrides").lean();
+  const password = d.provisioning?.overrides?.password || null;
+  await AuditLog.create({ user: req.user.id, device: req.device._id, action: "secret_view", result: "success", details: { what: "provisioned Wi-Fi password", found: !!password } });
+  res.json({ password });
+});
+
+router.post("/:id/provision", requireRole("admin"), async (req, res) => {
+  const { templateId, ssid, ssid5, password } = req.body || {};
+  const reason = reasonOf(req);
+  if (!reason) return res.status(400).json({ error: "Reason is required" });
+  if (!isValidObjectId(templateId)) return res.status(400).json({ error: "Pick a template" });
+  for (const [v, label] of [[ssid, "SSID"], [ssid5, "5 GHz SSID"]]) if (v && !prov.SSID_RE.test(v)) return res.status(400).json({ error: `${label} must be 1-32 printable characters` });
+  if (password && !prov.PSK_RE.test(password)) return res.status(400).json({ error: "Password must be 8-63 printable characters" });
+  await provisioner.request(req.device, { template: templateId, user: req.user.id, overrides: { ssid, ssid5, password } });
+  const device = await Device.findById(req.device._id).select("+provisioning.overrides");
+  const outcome = await provisioner.processOne(device, { connectionRequest: true });
+  const after = await Device.findById(req.device._id, "provisioning").lean();
+  if (after.provisioning.auditId) await AuditLog.updateOne({ _id: after.provisioning.auditId }, { $set: { "details.reason": reason } });
+  res.status(after.provisioning.state === "applied" ? 200 : 202).json({ ...after.provisioning, outcome });
+});
+
+router.put("/:id/tags", requireRole("noc", "admin"), async (req, res) => {
+  const tags = prov.normTags(req.body?.tags);
+  const before = req.device.tags;
+  req.device.tags = tags;
+  await req.device.save();
+  await AuditLog.create({ user: req.user.id, device: req.device._id, action: "tag_update", result: "success", details: { from: before, to: tags } });
+  res.json({ tags });
 });
 
 router.get("/:id/telemetry", async (req, res) => {

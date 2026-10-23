@@ -162,6 +162,7 @@ async function run() {
     await Device.updateMany({ genieacsDeviceId: { $nin: [...seen] }, removedAt: null }, { $set: { removedAt: now, online: null } });
     await closeReboots(boots);
     await syncAlerts(states, now);
+    for (const hook of hooks) status.hooks = { ...status.hooks, [hook.name || "hook"]: await hook(now).catch(err => ({ error: err.message })) };
     Object.assign(status, { error: null });
   } catch (err) {
     status.error = err.message;
@@ -172,8 +173,10 @@ async function run() {
   return status;
 }
 
+const hooks = [];
 let timer = null;
-function start() {
+function start({ after = [] } = {}) {
+  hooks.push(...[after].flat().filter(h => !hooks.includes(h)));
   if (timer || process.env.MONITOR_ENABLED === "false") return;
   const loop = async () => {
     await run();

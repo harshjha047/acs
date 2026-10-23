@@ -124,3 +124,10 @@ The file contains every SOAP message, including PPPoE usernames; delete it after
 `backup.sh` dumps Mongo to `BACKUP_DIR` (kept `BACKUP_KEEP_DAYS`, default 3), copies it to `BACKUP_RCLONE_TARGET` (kept `BACKUP_REMOTE_KEEP_DAYS`, default 90) and touches `BACKUP_DIR/.offbox-ok` (shown on `/system`). Backups contain device configs with plaintext secrets, so the target is an rclone `crypt` remote over a Drive remote (scope `drive.file`). Keep the crypt passwords outside the VPS too: without them the backups cannot be restored.
 
 Restore: `rclone copy gdrive-crypt:mongo-<date>.archive.gz /tmp/ && docker compose exec -T mongo mongorestore --archive --gzip --drop -u "$MONGO_USER" -p "$MONGO_PASS" --authenticationDatabase admin < /tmp/mongo-<date>.archive.gz`
+
+## Provisioning (templates, pre-registration, bulk)
+- Template (admin, Provisioning page): main SSID per band (pattern tokens `{serial4} {serial6} {mac4} {mac6} {account} {phone4}`; 5 GHz defaults to `<SSID>-5G`), password keep/generate, extra parameters, tags. ACS URL/credentials/inform settings are refused (the `inform` preset owns them).
+- Zero-touch = pre-registration (noc/admin) by serial or label WAN MAC. The monitor (60 s) matches it after the device registers, links the customer, adds tags and queues one `setParameterValues`. Behind CGNAT it runs at the next inform; state goes pending → queued → applied/failed (GenieACS fault or 24 h).
+- "Apply to every new device" only for templates that do not touch Wi-Fi, and only for devices first seen after it was switched on. Do not enable it before the OLT pushes the ACS URL fleet-wide unless the network team approves the parameters.
+- Bulk (device list checkboxes): tag/untag (noc/admin), apply template (admin, SSID pattern must contain a token), reboot (admin, ≤ 50). Each device gets its own audit entry with a shared `bulkId`.
+- First live test: pre-register the simulator (`202BC1-BM632w-000001`) or a spare ONT, never a customer ONU without approval.

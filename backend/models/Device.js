@@ -26,9 +26,26 @@ const DeviceSchema = new Schema({
   lastBootAt: { type: Date },
   lastSampleAt: { type: Date },
   mon: { type: Schema.Types.Mixed },
-  capabilities: { type: Schema.Types.Mixed }
+  capabilities: { type: Schema.Types.Mixed },
+  provisioning: {
+    template: { type: Schema.Types.ObjectId, ref: "ProvisioningTemplate" },
+    preRegistration: { type: Schema.Types.ObjectId, ref: "PreRegistration" },
+    requestedBy: { type: Schema.Types.ObjectId, ref: "User" },
+    state: { type: String, enum: ["pending", "queued", "applied", "failed"] },
+    overrides: { type: Schema.Types.Mixed, select: false },
+    requestedAt: { type: Date },
+    claimedAt: { type: Date },
+    queuedAt: { type: Date },
+    finishedAt: { type: Date },
+    taskId: { type: String },
+    auditId: { type: Schema.Types.ObjectId },
+    changes: [{ type: String }],
+    error: { type: String }
+  }
 }, { timestamps: true });
 
 DeviceSchema.index({ serialNumber: 1 });
+DeviceSchema.index({ "provisioning.state": 1 });
+DeviceSchema.index({ tags: 1 });
 
 module.exports = model("Device", DeviceSchema);

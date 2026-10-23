@@ -47,5 +47,10 @@ export const SEVERITY_TONE = { critical: "bad", warn: "warn", info: "muted" };
 
 export const ACTION_LABEL = {
   diagnostics_view: "Viewed diagnostics", reboot: "Reboot", factory_reset: "Factory reset", wifi_update: "Wi-Fi change", firmware_push: "Firmware push", device_remove: "Removed from ACS",
-  auto_provision: "Auto-provision", refresh: "Refresh", ping: "Ping test", traceroute: "Traceroute", speed_test: "Download test", upload_test: "Upload test", capture: "Capture", customer_link: "Customer linked"
+  auto_provision: "Auto-provision", refresh: "Refresh", ping: "Ping test", traceroute: "Traceroute", speed_test: "Download test", upload_test: "Upload test", capture: "Capture", customer_link: "Customer linked",
+  tag_update: "Tags changed", secret_view: "Viewed Wi-Fi password"
 };
+
+export const PROV_TONE = { pending: "warn", queued: "warn", applied: "ok", failed: "bad" };
+export const PROV_LABEL = { pending: "Provisioning: waiting for data", queued: "Provisioning: queued", applied: "Provisioned", failed: "Provisioning failed" };
+export const input = "h-11 w-full rounded-control border border-line bg-white px-4 text-sm outline-none focus:border-plum";
