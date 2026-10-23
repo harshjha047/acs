@@ -111,7 +111,7 @@ services:
       ACS_DOMAIN: ${ACS_DOMAIN}
       ACME_EMAIL: ${ACME_EMAIL}
     volumes:
-      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - ./caddy:/etc/caddy:ro
       - ./speedtest:/srv/speedtest:ro
       - caddy-data:/data
       - caddy-config:/config
