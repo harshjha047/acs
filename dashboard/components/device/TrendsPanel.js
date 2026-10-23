@@ -27,6 +27,7 @@ export default function TrendsPanel({ deviceId }) {
   const markers = (data?.events || []).filter(e => ["boot", "offline", "wan_down", "ppp_reconnect"].includes(e.type))
     .map(e => ({ at: e.at, label: `${EVENT_LABEL[e.type]} ${when(e.at)}`, color: e.type === "ppp_reconnect" ? "var(--color-amber)" : "var(--color-bad)" }));
   const has = key => pts.some(p => p[key] !== null);
+  const empty = what => <p className="text-sm text-ink-2">{pts.length < 2 ? "Collecting: needs two samples (about 5-10 min)." : what}</p>;
 
   return (
     <div className="grid gap-4">
@@ -43,10 +44,10 @@ export default function TrendsPanel({ deviceId }) {
             {has("rx") || has("tx") ? <LineChart points={pts} series={[{ key: "rx", label: "Rx" }, { key: "tx", label: "Tx" }]} unit="dBm" markers={markers} band={has("tx") ? null : [-25, -8]} /> : <p className="text-sm text-ink-2">Not reported.</p>}
           </Card>
           <Card title="Throughput (kbps, 5-min average)">
-            {has("inKbps") ? <LineChart points={pts} series={[{ key: "inKbps", label: "Down" }, { key: "outKbps", label: "Up" }]} fmt={kbps} markers={markers} /> : <p className="text-sm text-ink-2">No WAN byte counters yet.</p>}
+            {has("inKbps") ? <LineChart points={pts} series={[{ key: "inKbps", label: "Down" }, { key: "outKbps", label: "Up" }]} fmt={kbps} markers={markers} /> : empty("Device does not report WAN byte counters.")}
           </Card>
           <Card title="FEC errors per interval">
-            {has("fecDelta") ? <LineChart points={pts} series={[{ key: "fecDelta", label: "FEC" }]} markers={markers} /> : <p className="text-sm text-ink-2">Not reported.</p>}
+            {has("fecDelta") ? <LineChart points={pts} series={[{ key: "fecDelta", label: "FEC" }]} markers={markers} /> : empty("Not reported.")}
           </Card>
           <Card title="Module temperature (°C)">
             {has("temp") ? <LineChart points={pts} series={[{ key: "temp", label: "Temp" }]} unit="°C" markers={markers} /> : <p className="text-sm text-ink-2">Not reported.</p>}

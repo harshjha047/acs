@@ -50,6 +50,9 @@ export default function LineChart({ points, series, unit = "", markers = [], ban
         {band && <rect x="0" width={W} y={y(band[1])} height={Math.max(0, y(band[0]) - y(band[1]))} fill="var(--color-ok-bg)" />}
         {markers.map((m, i) => <line key={i} x1={x(m.at)} x2={x(m.at)} y1="0" y2={height} stroke={m.color || "var(--color-bad)"} strokeDasharray="3 3" vectorEffect="non-scaling-stroke"><title>{m.label}</title></line>)}
         {series.map((s, i) => <path key={s.key} d={path(s.key)} fill="none" stroke={s.color || COLORS[i]} strokeWidth="2" vectorEffect="non-scaling-stroke" />)}
+        {points.length <= 60 && series.map((s, i) => points.map((p, j) => (p[s.key] === null || p[s.key] === undefined ? null : (
+          <circle key={`${s.key}${j}`} cx={points.length === 1 ? W / 2 : x(p.at)} cy={y(p[s.key])} r="3" fill={s.color || COLORS[i]} />
+        ))))}
         {hp && <line x1={x(hp.at)} x2={x(hp.at)} y1="0" y2={height} stroke="var(--color-ink-3)" vectorEffect="non-scaling-stroke" />}
       </svg>
       <div className="mt-1 flex justify-between font-mono text-[11px] text-ink-3">
