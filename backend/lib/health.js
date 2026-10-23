@@ -8,6 +8,11 @@ const monitor = require("./monitor");
 const H = 3600 * 1000;
 const RANK = { ok: 0, warn: 1, bad: 2 };
 const check = (status, detail, extra = {}) => ({ status, detail, ...extra });
+const CORE = ["database", "nbi", "cwmp", "fileServer", "monitor"];
+const overall = checks => {
+  const all = worst(Object.values(checks));
+  return all === "bad" && !CORE.some(k => checks[k]?.status === "bad") ? "warn" : all;
+};
 const worst = list => list.reduce((w, c) => (RANK[c.status] > RANK[w] ? c.status : w), "ok");
 
 function gradeMonitor(st, intervalSec, now = Date.now(), processUptimeSec = process.uptime()) {
@@ -83,7 +88,7 @@ async function report() {
     memory: gradeMemory(usedMem)
   };
   return {
-    status: worst(Object.values(checks)),
+    status: overall(checks),
     checkedAt: new Date(),
     checks,
     host: { load: os.loadavg().map(n => Math.round(n * 100) / 100), cpus: os.cpus().length, memTotalMb: Math.round(os.totalmem() / 1048576), apiUptimeSec: Math.round(process.uptime()) },
@@ -91,4 +96,4 @@ async function report() {
   };
 }
 
-module.exports = { report, gradeMonitor, gradeBackup, gradeDisk, gradeMemory, worst };
+module.exports = { report, gradeMonitor, gradeBackup, gradeDisk, gradeMemory, worst, overall };

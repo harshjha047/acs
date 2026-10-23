@@ -1,7 +1,10 @@
 #!/usr/bin/env bash
 set -euo pipefail
 cd "$(dirname "$0")"
-set -a; . ./.env; set +a
+env_get() { sed -n "s/^$1=//p" .env | tail -1 | sed -e 's/^["'\'']//' -e 's/["'\'']$//'; }
+for k in MONGO_USER MONGO_PASS BACKUP_DIR BACKUP_KEEP_DAYS BACKUP_RSYNC_TARGET; do
+  [ -n "${!k:-}" ] || export "$k=$(env_get "$k")"
+done
 
 DIR="${BACKUP_DIR:-/opt/acs/backups}"
 KEEP="${BACKUP_KEEP_DAYS:-14}"

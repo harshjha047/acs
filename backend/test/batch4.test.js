@@ -21,7 +21,7 @@ const igd = (extra = {}) => buildTree({
   [`${T}.ResponseTime`]: 31,
   [`${T}.RouteHopsNumberOfEntries`]: 2,
   [`${T}.RouteHops.2.HopHost`]: "8.8.8.8",
-  [`${T}.RouteHops.2.HopRTTimes`]: "30,32,31",
+  [`${T}.RouteHops.2.HopRTTimes`]: "12.552,12.362,1",
   [`${T}.RouteHops.1.HopHost`]: "10.115.0.1",
   [`${T}.RouteHops.1.HopHostAddress`]: "10.115.0.1",
   [`${T}.RouteHops.1.HopRTTimes`]: "2,3,4",
@@ -37,7 +37,7 @@ test("traceroute: hops sorted with rtt average", () => {
   const r = diag.read(igd(), "traceroute");
   assert.equal(r.state, "complete");
   assert.equal(r.hopCount, 2);
-  assert.deepEqual(r.hops.map(h => [h.hop, h.host, h.avgMs, h.error]), [[1, "10.115.0.1", 3, null], [2, "8.8.8.8", 31, null]]);
+  assert.deepEqual(r.hops.map(h => [h.hop, h.host, h.avgMs, h.error]), [[1, "10.115.0.1", 3, null], [2, "8.8.8.8", 12, null]]);
 });
 
 test("traceroute: TR-181 field names", () => {
@@ -88,6 +88,8 @@ test("health: grading", () => {
   assert.equal(health.gradeBackup({ name: "m", mtime: now - 30 * 3600e3, size: 1e6 }, now).status, "warn");
   assert.equal(health.gradeDisk(4).status, "bad");
   assert.equal(health.worst([{ status: "ok" }, { status: "warn" }]), "warn");
+  assert.equal(health.overall({ database: { status: "ok" }, backup: { status: "bad" } }), "warn");
+  assert.equal(health.overall({ nbi: { status: "bad" }, backup: { status: "ok" } }), "bad");
 });
 
 test("upload sink: token, drain, size cap", async () => {

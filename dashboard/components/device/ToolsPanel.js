@@ -11,12 +11,13 @@ import { useToast } from "../ui/Toast";
 const finished = r => r && (r.fault || (!r.stale && (r.state === "complete" || r.state === "error")));
 const input = "h-11 rounded-control border border-line bg-white px-4 text-sm outline-none focus:border-plum";
 
-function Status({ poll, queued }) {
+function Status({ poll, queued, label }) {
   const r = poll.data;
-  if (r?.fault) return <p className="text-sm text-bad">Device rejected the test: {r.fault.detail || r.fault.message} ({r.fault.code})</p>;
-  if (r?.state === "error" && !r.stale) return <p className="text-sm text-bad">Test failed on device: {r.rawState}</p>;
-  if (poll.polling) return <p className="text-sm text-ink-2">{queued ? "Queued; runs at the device's next check-in (up to 5 min)..." : "Running on the device..."}</p>;
-  if (r && !finished(r)) return <p className="text-sm text-warn">No result yet. The device may run it on its next check-in; try “Check result” later.</p>;
+  const pre = label ? `${label}: ` : "";
+  if (r?.fault) return <p className="text-sm text-bad">{pre}Device rejected the test: {r.fault.detail || r.fault.message} ({r.fault.code})</p>;
+  if (r?.state === "error" && !r.stale) return <p className="text-sm text-bad">{pre}Test failed on device: {r.rawState}</p>;
+  if (poll.polling) return <p className="text-sm text-ink-2">{pre}{queued ? "Queued; runs at the device's next check-in (up to 5 min)..." : "Running on the device..."}</p>;
+  if (r && !finished(r) && r.requestedAt) return <p className="text-sm text-warn">{pre}No result yet. The device may run it on its next check-in; try “Check result” later.</p>;
   return null;
 }
 
@@ -38,12 +39,13 @@ function useDiagnostic(deviceId, kind) {
       toast(apiError(err, "Could not start test"), errTone(err));
     }
   }
-  async function check() {
+  async function check(quiet = false) {
     setChecking(true);
     try {
       const r = (await api.get(`/devices/${deviceId}/diagnostics/${kind}?live=1`)).data;
       poll.setData(r);
-      if (!finished(r)) toast("No result yet.", "warn", { duration: 2500 });
+      if (!finished(r) && !quiet) toast("No result yet.", "warn", { duration: 2500 });
+      return finished(r);
     } catch (err) {
       toast(apiError(err, "Check failed"), "bad");
     } finally {
@@ -71,6 +73,7 @@ function Transfer({ r, label }) {
 const hopTone = h => (h.error || !h.rtts.length ? "bad" : h.avgMs > 150 ? "warn" : "ok");
 
 export default function ToolsPanel({ deviceId }) {
+  const toast = useToast();
   const [caps, setCaps] = useState(null);
   const [host, setHost] = useState("8.8.8.8");
   const [count, setCount] = useState(4);
@@ -123,9 +126,9 @@ export default function ToolsPanel({ deviceId }) {
           <div className="flex flex-wrap gap-2">
             <Button loading={speed.poll.polling} disabled={off("download") || (busy && !speed.poll.polling)} onClick={() => speed.run()}>{speed.poll.polling ? "Testing…" : "Download test"}</Button>
             <Button loading={upload.poll.polling} disabled={off("upload") || (busy && !upload.poll.polling)} onClick={() => upload.run()}>{upload.poll.polling ? "Testing…" : "Upload test"}</Button>
-            <Button variant="secondary" loading={speed.checking || upload.checking} onClick={() => Promise.all([speed.check(), upload.check()])}>Check results</Button>
+            <Button variant="secondary" loading={speed.checking || upload.checking} onClick={async () => { if (!(await Promise.all([speed.check(true), upload.check(true)])).some(Boolean)) toast("No result yet.", "warn", { duration: 2500 }); }}>Check results</Button>
           </div>
-          <div className="mt-4 grid gap-1"><Status poll={speed.poll} queued={speed.queued} /><Status poll={upload.poll} queued={upload.queued} /></div>
+          <div className="mt-4 grid gap-1"><Status poll={speed.poll} queued={speed.queued} label="Download" /><Status poll={upload.poll} queued={upload.queued} label="Upload" /></div>
           <Transfer r={speed.poll.data} label="Download" />
           <Transfer r={upload.poll.data} label="Upload" />
         </Card>

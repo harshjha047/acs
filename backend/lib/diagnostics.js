@@ -50,6 +50,12 @@ function liveTask(doc, kind) {
   return parameterNames.length ? { name: "getParameterValues", parameterNames } : null;
 }
 
+function median(list) {
+  if (!list.length) return null;
+  const s = [...list].sort((a, b) => a - b), m = s.length >> 1;
+  return Math.round(s.length % 2 ? s[m] : (s[m - 1] + s[m]) / 2);
+}
+
 const num = v => (v === null || v === undefined || v === "" || !Number.isFinite(Number(v)) ? null : Number(v));
 
 function transfer(r, bytes) {
@@ -75,7 +81,7 @@ function hops(doc, base) {
         address: pick("HopHostAddress", "HostAddress"),
         error: error || null,
         rtts,
-        avgMs: rtts.length ? Math.round(rtts.reduce((a, b) => a + b, 0) / rtts.length) : null
+        avgMs: median(rtts)
       };
     });
 }
