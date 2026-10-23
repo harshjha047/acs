@@ -87,7 +87,8 @@ export default function ToolsPanel({ deviceId }) {
   const p = ping.poll.data, t = trace.poll.data;
   const busy = [ping, trace, speed, upload].some(d => d.poll.polling);
   const allowed = can(useUser(), "diagnostics.run");
-  const off = key => !allowed || (!!caps?.[key] && !caps[key].supported);
+  const unsupported = key => !!caps?.[key] && !caps[key].supported;
+  const off = key => !allowed || unsupported(key);
 
   useEffect(() => {
     api.get(`/devices/${deviceId}/capabilities`).then(r => setCaps(r.data)).catch(() => setCaps({}));
@@ -125,7 +126,7 @@ export default function ToolsPanel({ deviceId }) {
 
         <Card title="Speed test from the router">
           <p className="mb-4 text-sm text-ink-2">Transfers a test file between the router and our server (TR-143). Result is capped by the server’s bandwidth; use it to spot clearly low speeds.</p>
-          <Unsupported cap={off("download") ? caps.download : off("upload") ? caps.upload : null} />
+          <Unsupported cap={unsupported("download") ? caps.download : unsupported("upload") ? caps.upload : null} />
           <div className="flex flex-wrap gap-2">
             <Button loading={speed.poll.polling} disabled={off("download") || (busy && !speed.poll.polling)} onClick={() => speed.run()}>{speed.poll.polling ? "Testing…" : "Download test"}</Button>
             <Button loading={upload.poll.polling} disabled={off("upload") || (busy && !upload.poll.polling)} onClick={() => upload.run()}>{upload.poll.polling ? "Testing…" : "Upload test"}</Button>
