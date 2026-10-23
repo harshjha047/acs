@@ -31,7 +31,8 @@ async function run(rows, { dryRun = true } = {}) {
 
   async function upsert(Model, kind, key, filter, set) {
     if (cache[kind].has(key)) return cache[kind].get(key);
-    let doc = await Model.findOne(filter, "_id").lean();
+    const parentIsNew = Object.values(filter).some(v => typeof v === "string" && v.startsWith("new:"));
+    let doc = parentIsNew ? null : await Model.findOne(filter, "_id").lean();
     if (!doc) {
       stats[{ pop: "pops", olt: "olts", port: "ponPorts" }[kind]]++;
       doc = dryRun ? { _id: fakeId(key) } : await Model.findOneAndUpdate(filter, { $set: set }, { upsert: true, new: true, lean: true });
