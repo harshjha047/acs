@@ -2,7 +2,8 @@ import { useEffect, useState } from "react";
 import Link from "next/link";
 import api from "../../lib/api";
 import { useUser, can } from "../../lib/session";
-import { ago, gradeTone, onlineState, ALERT_LABEL, SEVERITY_TONE } from "../../lib/format";
+import { useRouter } from "next/router";
+import { ago, gradeTone, onlineState, ALERT_LABEL, SEVERITY_TONE, HEALTH_TONE } from "../../lib/format";
 import Shell from "../../components/Shell";
 import Card from "../../components/ui/Card";
 import Badge from "../../components/ui/Badge";
@@ -22,12 +23,14 @@ export default function DeviceList() {
   const [selected, setSelected] = useState(new Set());
   const user = useUser();
   const [tick, setTick] = useState(0);
+  const router = useRouter();
+  const pon = typeof router.query.pon === "string" ? router.query.pon : "";
 
 
   useEffect(() => {
     setLoading(true);
     const [kind, value] = filter.split(":");
-    const params = { ...(q.trim() && { q: q.trim() }), ...(tag.trim() && { tag: tag.trim() }), ...(kind === "prov" ? { prov: value } : filter && { state: filter }) };
+    const params = { ...(q.trim() && { q: q.trim() }), ...(tag.trim() && { tag: tag.trim() }), ...(pon && { pon }), ...(kind === "prov" ? { prov: value } : kind === "health" ? { health: value } : filter && { state: filter }) };
     const fetchList = () => api.get("/devices", { params })
       .then(({ data }) => { setDevices(data); setError(""); })
       .catch(() => setError("Failed to load devices"))
@@ -35,7 +38,7 @@ export default function DeviceList() {
     const t = setTimeout(fetchList, q ? 300 : 0);
     const poll = setInterval(fetchList, 30000);
     return () => { clearTimeout(t); clearInterval(poll); };
-  }, [q, filter, tag, tick]);
+  }, [q, filter, tag, tick, pon]);
 
   const offline = devices.filter(d => onlineState(d) === "offline").length;
   const bulkRole = ["device.tag", "device.provision", "bulk.reboot"].some(p => can(user, p));
@@ -55,9 +58,11 @@ export default function DeviceList() {
         />
         <select value={filter} onChange={e => setFilter(e.target.value)} className="h-12 rounded-control border border-line bg-white px-3 text-sm">
           <option value="">All</option><option value="online">Online</option><option value="offline">Offline</option><option value="alerts">With alerts</option><option value="lowrx">Rx warn/bad</option>
+          <option value="health:poor">Health poor</option><option value="health:fair">Health fair</option>
           <option value="prov:pending">Provisioning waiting</option><option value="prov:queued">Provisioning queued</option><option value="prov:failed">Provisioning failed</option><option value="prov:applied">Provisioned</option>
         </select>
         <input value={tag} onChange={e => setTag(e.target.value)} placeholder="Tag" className="h-12 w-32 rounded-control border border-line bg-white px-3 text-sm outline-none focus:border-plum" />
+        {pon && <button onClick={() => router.replace("/devices")} className="rounded-chip bg-muted-bg px-3 py-1 text-xs font-semibold text-muted">PON filter ×</button>}
         {!loading && <span className="text-sm text-ink-2">{devices.length} devices{offline ? ` · ${offline} offline` : ""}</span>}
       </div>
       {bulkRole && <BulkBar ids={[...selected]} user={user} onDone={() => setTick(t => t + 1)} onClear={() => setSelected(new Set())} />}
@@ -66,13 +71,14 @@ export default function DeviceList() {
         {error && <p className="text-sm font-semibold text-bad">{error}</p>}
         {!loading && !error && devices.length === 0 && <p className="text-sm text-ink-2">{q ? "No matches." : "No devices have connected yet."}</p>}
         {devices.length > 0 && (
-          <Table head={[...(bulkRole ? [<input key="all" type="checkbox" aria-label="Select all" checked={allOn} onChange={toggleAll} />] : []), "Status", "Alerts", "Customer", "PPPoE / IP", "Serial", "Model", "Rx", "Last seen", ""]}>
+          <Table head={[...(bulkRole ? [<input key="all" type="checkbox" aria-label="Select all" checked={allOn} onChange={toggleAll} />] : []), "Status", "Health", "Alerts", "Customer", "PPPoE / IP", "Serial", "Model", "Rx", "Last seen", ""]}>
             {devices.map(d => {
               const state = onlineState(d);
               return (
                 <Row key={d._id} className={selected.has(d._id) ? "bg-canvas" : ""}>
                   {bulkRole && <Cell><input type="checkbox" aria-label={`Select ${d.serialNumber}`} checked={selected.has(d._id)} onChange={() => toggle(d._id)} /></Cell>}
                   <Cell><Badge tone={tone[state]}>{state}</Badge></Cell>
+                  <Cell>{d.health?.status && d.health.status !== "offline" ? <Badge tone={HEALTH_TONE[d.health.status]}>{d.health.score}</Badge> : null}</Cell>
                   <Cell>{d.alerts?.length ? <div className="flex flex-wrap gap-1">{d.alerts.map(a => <Badge key={a.type} tone={SEVERITY_TONE[a.severity]}>{ALERT_LABEL[a.type] || a.type}</Badge>)}</div> : null}</Cell>
                   <Cell>{d.customer ? <><div className="font-semibold text-plum">{d.customer.name}</div><div className="font-mono text-xs text-ink-2">{d.customer.accountId}</div></> : <span className="text-ink-3">unlinked</span>}</Cell>
                   <Cell mono>{d.pppoeUsername || d.wanIp}</Cell>

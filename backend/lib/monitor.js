@@ -6,6 +6,7 @@ const Telemetry = require("../models/Telemetry");
 const AuditLog = require("../models/AuditLog");
 const Alert = require("../models/Alert");
 const t = require("./telemetry");
+const { reconcile } = require("./alertSync");
 
 const PAGE = 500;
 const INTERVAL = () => Number(process.env.MONITOR_INTERVAL_SEC || 60) * 1000;
@@ -63,24 +64,14 @@ async function closeReboots(boots) {
   );
 }
 
+const MONITOR_TYPES = ["offline", "low_rx", "reboot_loop", "unknown_device"];
+
 async function syncAlerts(states, now) {
   const since = new Date(now - 3600 * 1000);
   const loops = await DeviceEvent.aggregate([{ $match: { type: "boot", at: { $gte: since } } }, { $group: { _id: "$device", n: { $sum: 1 } } }]);
   const boots = new Map(loops.map(l => [String(l._id), l.n]));
-  const desired = new Map();
-  for (const s of states) {
-    for (const a of t.alertsFor({ ...s, boots: boots.get(String(s.device)) || 0, now })) desired.set(`${s.device}:${a.type}`, { device: s.device, ...a });
-  }
-  const open = await Alert.find({ open: true }, "device type").lean();
-  const openKeys = new Set(open.map(a => `${a.device}:${a.type}`));
-  const ops = [];
-  for (const a of open) {
-    const want = desired.get(`${a.device}:${a.type}`);
-    if (want) ops.push({ updateOne: { filter: { _id: a._id }, update: { $set: { severity: want.severity, message: want.message, value: want.value, lastSeenAt: now } } } });
-    else if (a.type !== "unknown_device") ops.push({ updateOne: { filter: { _id: a._id }, update: { $set: { open: false, closedAt: now } } } });
-  }
-  for (const [k, a] of desired) if (!openKeys.has(k)) ops.push({ insertOne: { document: { ...a, openedAt: now, lastSeenAt: now } } });
-  if (ops.length) await Alert.bulkWrite(ops, { ordered: false });
+  const desired = states.flatMap(s => t.alertsFor({ ...s, boots: boots.get(String(s.device)) || 0, now }).map(a => ({ device: s.device, ...a })));
+  await reconcile(desired, MONITOR_TYPES, now);
 }
 
 async function run() {

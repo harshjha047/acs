@@ -2,7 +2,7 @@ import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 import api from "../lib/api";
 import { useUser, can } from "../lib/session";
-import { ago, apiError, when, EVENT_LABEL, EVENT_TONE, describeEvent, ALERT_LABEL, SEVERITY_TONE } from "../lib/format";
+import { ago, apiError, when, EVENT_LABEL, EVENT_TONE, describeEvent, ALERT_LABEL, SEVERITY_TONE, portName } from "../lib/format";
 import Shell from "../components/Shell";
 import Card from "../components/ui/Card";
 import Badge from "../components/ui/Badge";
@@ -25,6 +25,7 @@ export default function Outage() {
   const toast = useToast();
   const [data, setData] = useState(null);
   const [alerts, setAlerts] = useState([]);
+  const [showGrouped, setShowGrouped] = useState(false);
   const user = useUser();
 
 
@@ -47,6 +48,8 @@ export default function Outage() {
     }
   }
 
+  const grouped = alerts.filter(a => a.inOutage).length;
+  const visible = showGrouped ? alerts : alerts.filter(a => !a.inOutage);
   const t = data?.totals;
   const m = data?.monitor;
   return (
@@ -65,6 +68,19 @@ export default function Outage() {
             Monitor {m.error ? <span className="text-bad">error: {m.error}</span> : "ok"} · last run {ago(m.lastRunAt)} · {m.devices} devices in {m.durationMs ?? "—"} ms · auto-refresh 30 s
           </p>
 
+          {data.ponOutages?.length > 0 && (
+            <Card title="PON outages" className="border-bad">
+              {data.ponOutages.map(a => (
+                <div key={a._id} className="flex flex-wrap items-center gap-3 border-b border-line/60 py-2 text-sm last:border-0">
+                  <Badge tone={SEVERITY_TONE[a.severity]}>{a.affected} offline</Badge>
+                  <Link className="font-semibold text-plum underline" href={`/topology?port=${a.ponPort?._id}`}>{portName(a.ponPort)}</Link>
+                  <span className="text-ink-2">{a.message} · since {ago(a.value?.since || a.openedAt)}</span>
+                  <Link className="ml-auto text-xs font-semibold text-plum underline" href={`/devices?pon=${a.ponPort?._id}`}>Devices</Link>
+                </div>
+              ))}
+            </Card>
+          )}
+
           {data.clusters.length > 0 && (
             <Card title="Possible area outages" className="border-bad">
               {data.clusters.map((c, i) => (
@@ -73,14 +89,17 @@ export default function Outage() {
             </Card>
           )}
 
-          <Card title={`Open alerts (${alerts.length})`}>
-            {alerts.length === 0 ? <p className="text-sm text-ink-2">All clear.</p> : (
+          <Card
+            title={`Open alerts (${visible.length})`}
+            action={grouped > 0 && <button className="text-xs font-semibold text-plum underline" onClick={() => setShowGrouped(v => !v)}>{showGrouped ? "Hide" : "Show"} {grouped} offline in PON outages</button>}
+          >
+            {visible.length === 0 ? <p className="text-sm text-ink-2">All clear.</p> : (
               <Table head={["Severity", "Alert", "Customer / device", "Detail", "Since", ""]}>
-                {alerts.map(a => (
+                {visible.map(a => (
                   <Row key={a._id}>
                     <Cell><Badge tone={SEVERITY_TONE[a.severity]}>{a.severity}</Badge></Cell>
                     <Cell>{ALERT_LABEL[a.type] || a.type}</Cell>
-                    <Cell>{a.device ? <Link className="font-semibold text-plum underline" href={`/devices/${a.device._id}`}>{customerOf(a.device)}</Link> : "—"}</Cell>
+                    <Cell>{a.device ? <Link className="font-semibold text-plum underline" href={`/devices/${a.device._id}`}>{customerOf(a.device)}</Link> : a.ponPort ? <Link className="font-semibold text-plum underline" href={`/topology?port=${a.ponPort._id}`}>{portName(a.ponPort)}</Link> : "—"}</Cell>
                     <Cell>{a.message}{a.ackBy && <div className="text-xs text-ink-2">ack by {a.ackBy.name} {ago(a.ackAt)}</div>}</Cell>
                     <Cell>{ago(a.openedAt)}</Cell>
                     <Cell className="text-right">{!a.ackAt && can(user, "alert.ack") && <Button variant="secondary" onClick={() => ack(a)}>Ack</Button>}</Cell>
@@ -96,7 +115,7 @@ export default function Outage() {
                 <Table head={["Customer / device", "Model", "Last seen", "Last Rx"]}>
                   {data.offline.map(d => (
                     <Row key={d._id}>
-                      <Cell><Link className="font-semibold text-plum underline" href={`/devices/${d._id}`}>{customerOf(d)}</Link></Cell>
+                      <Cell><Link className="font-semibold text-plum underline" href={`/devices/${d._id}`}>{customerOf(d)}</Link>{d.inOutage && <div className="text-xs text-bad">in PON outage</div>}</Cell>
                       <Cell>{d.productClass}</Cell>
                       <Cell>{ago(d.offlineSince || d.lastInformAt)}</Cell>
                       <Cell>{d.rxPower ?? "—"}</Cell>

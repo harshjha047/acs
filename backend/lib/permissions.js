@@ -29,7 +29,8 @@ const BASE = {
   "monitor.run": ADMIN,
   "firmware.manage": ADMIN,
   "firmware.deploy": ADMIN,
-  "factoryReset.execute": ADMIN
+  "factoryReset.execute": ADMIN,
+  "topology.write": ADMIN
 };
 const PERMS = Object.keys(BASE);
 

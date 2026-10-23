@@ -10,10 +10,18 @@ const usable = v => (v && v !== "0.0.0.0" ? v : null);
 const PROJECTION = [
   "_deviceId", "_lastInform", "_lastBoot", "_registered",
   `${IGD}.DeviceInfo.UpTime`, `${IGD}.DeviceInfo.SoftwareVersion`, `${IGD}.ManagementServer.PeriodicInformInterval`,
-  `${IGD}.WANDevice`, `${IGD}.X_ALU_OntOpticalParam`,
+  `${IGD}.WANDevice`, `${IGD}.X_ALU_OntOpticalParam`, `${IGD}.LANDevice.1.LANEthernetInterfaceConfig`,
   "Device.DeviceInfo.UpTime", "Device.DeviceInfo.SoftwareVersion", "Device.ManagementServer.PeriodicInformInterval",
-  "Device.Optical", "Device.PPP", "Device.IP.Interface"
+  "Device.Optical", "Device.PPP", "Device.IP.Interface", "Device.Ethernet.Interface"
 ];
+
+const isFastOnGigPort = p => p.up && num(p.speed) === 100 && !(num(p.maxSpeed) > 0 && num(p.maxSpeed) <= 100);
+
+function lan(doc) {
+  const ports = view.lanPorts(doc);
+  if (!ports.length) return { lanUp: null, lan100: null };
+  return { lanUp: ports.filter(p => p.up).length, lan100: ports.filter(isFastOnGigPort).length };
+}
 
 const onlineWindowSec = interval => (interval || 300) * 2 + 120;
 const isOnline = (lastInform, interval, now = Date.now()) => !!lastInform && (now - ms(lastInform)) / 1000 <= onlineWindowSec(interval);
@@ -59,7 +67,8 @@ function sample(doc, profile = {}) {
     pppoeUsername: wan?.Username || null,
     macAddress: wan?.MACAddress ? String(wan.MACAddress).toLowerCase() : null,
     bytesIn: bytes?.in ?? null,
-    bytesOut: bytes?.out ?? null
+    bytesOut: bytes?.out ?? null,
+    ...lan(doc)
   };
 }
 
@@ -139,4 +148,4 @@ function clusters(offline, gapMin = 10, minSize = Number(process.env.OUTAGE_MIN_
   return groups.filter(g => g.devices.length >= minSize).map(g => ({ ...g, count: g.devices.length })).reverse();
 }
 
-module.exports = { PROJECTION, isOnline, onlineWindowSec, sample, detect, alertsFor, series, clusters, wanBytes };
+module.exports = { PROJECTION, isFastOnGigPort, isOnline, onlineWindowSec, sample, detect, alertsFor, series, clusters, wanBytes };

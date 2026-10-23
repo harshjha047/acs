@@ -22,6 +22,7 @@ import TrendsPanel from "../../components/device/TrendsPanel";
 import CustomerLink from "../../components/device/CustomerLink";
 import ProvisionCard from "../../components/device/ProvisionCard";
 import FirmwareCard from "../../components/device/FirmwareCard";
+import DiagnosisCard from "../../components/device/DiagnosisCard";
 
 const TABS = [
   ["overview", "Overview"],
@@ -150,7 +151,10 @@ export default function DeviceDetail() {
 
           {tab === "overview" && summary && (
             <div className="grid gap-4 lg:grid-cols-2">
-              <HealthCard summary={summary} />
+              <div className="grid content-start gap-4">
+                <DiagnosisCard device={device} />
+                <HealthCard summary={summary} />
+              </div>
               <div className="grid content-start gap-4">
                 <OpticalCard optical={summary.optical} />
                 <Card title="At a glance">

@@ -27,6 +27,13 @@ const DeviceSchema = new Schema({
   lastSampleAt: { type: Date },
   mon: { type: Schema.Types.Mixed },
   capabilities: { type: Schema.Types.Mixed },
+  service: { type: Schema.Types.ObjectId, ref: "Service" },
+  health: {
+    score: { type: Number },
+    status: { type: String, enum: ["good", "fair", "poor", "offline"] },
+    components: { type: Schema.Types.Mixed },
+    at: { type: Date }
+  },
   provisioning: {
     template: { type: Schema.Types.ObjectId, ref: "ProvisioningTemplate" },
     preRegistration: { type: Schema.Types.ObjectId, ref: "PreRegistration" },
@@ -47,5 +54,6 @@ const DeviceSchema = new Schema({
 DeviceSchema.index({ serialNumber: 1 });
 DeviceSchema.index({ "provisioning.state": 1 });
 DeviceSchema.index({ tags: 1 });
+DeviceSchema.index({ "health.status": 1 });
 
 module.exports = model("Device", DeviceSchema);

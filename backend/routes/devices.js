@@ -22,6 +22,8 @@ const sink = require("../lib/uploadSink");
 const Template = require("../models/ProvisioningTemplate");
 const provisioner = require("../lib/provisioner");
 const prov = require("../lib/provisioning");
+const intel = require("../lib/intel");
+const Service = require("../models/Service");
 
 router.use(requireAuth);
 
@@ -218,6 +220,8 @@ router.get("/", async (req, res) => {
   if (req.query.state === "alerts") filter._id = { $in: await Alert.distinct("device", { open: true }) };
   if (req.query.tag) filter.tags = String(req.query.tag).toLowerCase();
   if (["pending", "queued", "applied", "failed"].includes(req.query.prov)) filter["provisioning.state"] = req.query.prov;
+  if (["good", "fair", "poor", "offline"].includes(req.query.health)) filter["health.status"] = req.query.health;
+  if (isValidObjectId(req.query.pon)) filter.$and = [{ _id: { $in: await Service.distinct("device", { ponPort: req.query.pon, device: { $ne: null } }) } }];
   const devices = await Device.find(filter, "-mon").populate("customer", "name phone accountId").sort({ lastInformAt: -1 }).limit(500).lean();
   const alerts = await Alert.find({ open: true, device: { $in: devices.map(d => d._id) } }, "device type severity").lean();
   const byDevice = Map.groupBy(alerts, a => String(a.device));
@@ -225,7 +229,7 @@ router.get("/", async (req, res) => {
 });
 
 router.get("/:id", async (req, res) => {
-  const device = await req.device.populate("customer");
+  const device = await req.device.populate(["customer", { path: "service", populate: { path: "ponPort", select: "label slot port olt", populate: { path: "olt", select: "name" } } }]);
   const alerts = await Alert.find({ device: req.device._id, open: true }).sort({ openedAt: -1 }).lean();
   const { mon, ...rest } = device.toObject();
   res.json({ ...rest, alerts });
@@ -277,6 +281,12 @@ router.get("/:id/telemetry", async (req, res) => {
     DeviceEvent.find({ device: req.device._id, at: { $gte: since } }, "-_id -device").sort({ at: -1 }).limit(500).lean()
   ]);
   res.json({ hours, points: series(points), events });
+});
+
+router.get("/:id/health", async (req, res) => {
+  const result = await intel.forDevice(req.device._id);
+  if (!result) return res.status(404).json({ error: "Device not found" });
+  res.json(result);
 });
 
 router.get("/:id/events", async (req, res) => {

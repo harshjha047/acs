@@ -293,6 +293,7 @@ function lanPorts(doc) {
       status: valueOf(n.Status),
       up: isUp(valueOf(n.Status)),
       speed: valueOf(n.CurrentBitRate) ?? valueOf(n.MaxBitRate),
+      maxSpeed: valueOf(n.MaxBitRate),
       duplex: valueOf(n.DuplexMode)
     }));
 }

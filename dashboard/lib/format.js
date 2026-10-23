@@ -42,7 +42,12 @@ export function describeEvent(e) {
   return d.status || d.serialNumber || "";
 }
 
-export const ALERT_LABEL = { offline: "Offline", low_rx: "Low Rx", reboot_loop: "Reboot loop", unknown_device: "New device" };
+export const ALERT_LABEL = {
+  offline: "Offline", low_rx: "Low Rx", reboot_loop: "Reboot loop", unknown_device: "New device", optical_degrading: "Rx degrading", high_temp: "High temperature",
+  high_fec: "Fiber errors", wan_flapping: "WAN flapping", ppp_flapping: "PPPoE flapping", lan_100m: "LAN at 100M", pon_outage: "PON outage", firmware_changed: "Firmware changed"
+};
+export const HEALTH_TONE = { good: "ok", fair: "warn", poor: "bad", offline: "bad" };
+export const portName = p => (p ? `${p.olt?.name || "OLT"} ${p.label || [p.slot, p.port].filter(Boolean).join("/")}` : "—");
 export const SEVERITY_TONE = { critical: "bad", warn: "warn", info: "muted" };
 
 export const ACTION_LABEL = {

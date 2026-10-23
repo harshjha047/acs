@@ -1,15 +1,17 @@
 import { useEffect } from "react";
 import Link from "next/link";
 import { useRouter } from "next/router";
-import { Router as RouterIcon, ScrollText, Users, LogOut, Siren, Activity, Contact, WandSparkles, Cpu, ShieldCheck } from "lucide-react";
+import { Router as RouterIcon, ScrollText, Users, LogOut, Siren, Activity, Contact, WandSparkles, Cpu, ShieldCheck, Network, Gauge } from "lucide-react";
 import { useUser, can, clearSession, needsMfaSetup } from "../lib/session";
 
 const nav = [
+  { href: "/noc", label: "NOC wall", icon: Gauge },
   { href: "/devices", label: "Devices", icon: RouterIcon },
   { href: "/customers", label: "Customers", icon: Contact },
   { href: "/provisioning", label: "Provisioning", icon: WandSparkles },
   { href: "/firmware", label: "Firmware", icon: Cpu, perm: "firmware.view" },
   { href: "/outage", label: "Outage & alerts", icon: Siren },
+  { href: "/topology", label: "Topology", icon: Network },
   { href: "/audit", label: "Audit log", icon: ScrollText },
   { href: "/system", label: "System health", icon: Activity, perm: "system.view" },
   { href: "/users", label: "Users", icon: Users, perm: "user.manage" },
