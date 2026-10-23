@@ -8,17 +8,17 @@ export default function LineChart({ points, series, unit = "", markers = [], ban
   const [hover, setHover] = useState(null);
   const { x, y, min, max, t0, t1 } = useMemo(() => {
     const vals = points.flatMap(p => series.map(s => p[s.key])).filter(v => v !== null && v !== undefined);
-    if (band) vals.push(...band.filter(v => v !== null));
     let lo = Math.min(...vals), hi = Math.max(...vals);
     if (!vals.length) { lo = 0; hi = 1; }
     if (lo === hi) { lo -= 1; hi += 1; }
     const pad = (hi - lo) * 0.1;
+    const floor = lo >= 0 ? 0 : -Infinity;
     const t0 = points.length ? new Date(points[0].at).getTime() : 0;
     const t1 = points.length ? new Date(points.at(-1).at).getTime() : 1;
     return {
-      min: lo - pad, max: hi + pad, t0, t1,
+      min: Math.max(floor, lo - pad), max: hi + pad, t0, t1,
       x: at => ((new Date(at).getTime() - t0) / Math.max(1, t1 - t0)) * W,
-      y: v => height - ((v - (lo - pad)) / (hi + pad - (lo - pad))) * height
+      y: v => height - ((v - Math.max(floor, lo - pad)) / (hi + pad - Math.max(floor, lo - pad))) * height
     };
   }, [points, series, band, height]);
 

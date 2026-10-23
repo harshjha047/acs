@@ -141,12 +141,12 @@ async function run() {
           ...(cur.rxDbm !== null && { rxPower: cur.rxDbm, rxGrade: cur.rxGrade })
         };
         if (!cur.lastBoot && cur.lastInform && cur.uptime !== null) set.lastBootAt = new Date(cur.lastInform - cur.uptime * 1000);
-        if (changed && cur.lastInform && (!dev.lastSampleAt || now - new Date(dev.lastSampleAt) >= SAMPLE_MIN())) {
+        if (changed && cur.lastInform && (!dev.lastSampleAt || cur.lastInform - new Date(dev.lastSampleAt) >= SAMPLE_MIN() - 30000)) {
           samples.push({
             at: cur.lastInform, device: dev._id, rx: cur.rxDbm, tx: cur.txDbm, temp: cur.tempC, fec: cur.fecErrors,
             uptime: cur.uptime, pppUptime: cur.pppUptime, wanUp: cur.wanUp, bytesIn: cur.bytesIn, bytesOut: cur.bytesOut
           });
-          set.lastSampleAt = now;
+          set.lastSampleAt = cur.lastInform;
         }
         ops.push({ updateOne: { filter: { _id: dev._id }, update: { $set: set, ...(dev.removedAt && { $unset: { removedAt: "" } }) } } });
         states.push({ device: dev._id, online, mon: cur, verified: !!profile.verifiedOnRealDevice });

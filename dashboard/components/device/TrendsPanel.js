@@ -40,8 +40,13 @@ export default function TrendsPanel({ deviceId }) {
       {!data && <p className="text-sm">Loading...</p>}
       {data && (
         <div className="grid gap-4 lg:grid-cols-2">
-          <Card title="Optical power (dBm)">
-            {has("rx") || has("tx") ? <LineChart points={pts} series={[{ key: "rx", label: "Rx" }, { key: "tx", label: "Tx" }]} unit="dBm" markers={markers} band={has("tx") ? null : [-25, -8]} /> : <p className="text-sm text-ink-2">Not reported.</p>}
+          <Card title="Optical power (dBm, green = normal range)">
+            {has("rx") || has("tx") ? (
+              <div className="grid gap-4">
+                {has("rx") && <LineChart points={pts} series={[{ key: "rx", label: "Rx" }]} unit="dBm" markers={markers} band={[-25, -8]} />}
+                {has("tx") && <LineChart points={pts} series={[{ key: "tx", label: "Tx", color: "var(--color-plum)" }]} unit="dBm" markers={markers} band={[0.5, 5]} />}
+              </div>
+            ) : <p className="text-sm text-ink-2">Not reported.</p>}
           </Card>
           <Card title="Throughput (kbps, 5-min average)">
             {has("inKbps") ? <LineChart points={pts} series={[{ key: "inKbps", label: "Down" }, { key: "outKbps", label: "Up" }]} fmt={kbps} markers={markers} /> : empty("Device does not report WAN byte counters.")}
