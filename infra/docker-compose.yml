@@ -76,6 +76,11 @@ services:
       SPEEDTEST_URL: http://${ACS_DOMAIN}/speedtest/50MB.bin
       CWMP_USER: ${CWMP_USER:-}
       CWMP_PASS: ${CWMP_PASS:-}
+      MONITOR_INTERVAL_SEC: ${MONITOR_INTERVAL_SEC:-60}
+      TELEMETRY_MIN_SEC: ${TELEMETRY_MIN_SEC:-300}
+      TELEMETRY_RETENTION_DAYS: ${TELEMETRY_RETENTION_DAYS:-30}
+      ALERT_RX_WARN_DBM: ${ALERT_RX_WARN_DBM:--27}
+      ALERT_RX_CRIT_DBM: ${ALERT_RX_CRIT_DBM:--29}
     depends_on:
       mongo:
         condition: service_healthy

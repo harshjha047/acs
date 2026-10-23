@@ -23,6 +23,11 @@ if (igd) {
   declare("InternetGatewayDevice.LANDevice.*.Hosts.Host.*.*", {path: now, value: now});
   declare("InternetGatewayDevice.WANDevice.*.WANConnectionDevice.*.*.*.ConnectionStatus", {value: now});
   declare("InternetGatewayDevice.WANDevice.*.WANConnectionDevice.*.*.*.ExternalIPAddress", {value: now});
+  declare("InternetGatewayDevice.WANDevice.*.WANConnectionDevice.*.*.*.Uptime", {value: now});
+  declare("InternetGatewayDevice.WANDevice.*.WANConnectionDevice.*.*.*.Stats.EthernetBytesSent", {value: now});
+  declare("InternetGatewayDevice.WANDevice.*.WANConnectionDevice.*.*.*.Stats.EthernetBytesReceived", {value: now});
+  declare("InternetGatewayDevice.WANDevice.*.WANCommonInterfaceConfig.TotalBytesSent", {value: now});
+  declare("InternetGatewayDevice.WANDevice.*.WANCommonInterfaceConfig.TotalBytesReceived", {value: now});
   const daily = Date.now(86400000);
   for (const o of ["X_CT-COM_EponInterfaceConfig", "X_CT-COM_GponInterfaceConfig", "X_HW_GponInterfaceConfig", "X_GponInterafceConfig", "X_ZTE-COM_WANPONInterfaceConfig"]) {
     declare("InternetGatewayDevice.WANDevice.*." + o + ".*", {path: daily, value: now});
@@ -31,6 +36,12 @@ if (igd) {
   declare("Device.DeviceInfo.UpTime", {value: now});
   declare("Device.WiFi.SSID.*.SSID", {value: now});
   declare("Device.Hosts.Host.*.*", {path: now, value: now});
+  for (const b of ["Device.PPP.Interface.*", "Device.IP.Interface.*"]) {
+    declare(b + ".Status", {value: now});
+    declare(b + ".Stats.BytesSent", {value: now});
+    declare(b + ".Stats.BytesReceived", {value: now});
+  }
+  declare("Device.PPP.Interface.*.ConnectionStatus", {value: now});
   declare("Device.Optical.Interface.*.*", {path: Date.now(86400000), value: now});
 }
 `,

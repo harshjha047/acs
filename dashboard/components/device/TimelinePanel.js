@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from "react";
 import api from "../../lib/api";
-import { apiError, when } from "../../lib/format";
+import { apiError, when, EVENT_LABEL, describeEvent } from "../../lib/format";
 import Card from "../ui/Card";
 import Badge from "../ui/Badge";
 import Button from "../ui/Button";
@@ -16,12 +16,14 @@ const RESULT = { success: "ok", failed: "bad", pending: "warn" };
 function describe(e) {
   if (e.type === "note") return e.text;
   if (e.type === "system") return e.text;
+  if (e.type === "event") return describeEvent(e);
   if (e.type === "fault") return `Device fault ${e.code}: ${e.detail || e.message}`;
   const d = e.details || {};
   if (e.action === "wifi_update") return (d.changes || []).map(([p, v]) => `${p.split(".").slice(-2).join(".")} → ${v}`).join(", ");
   if (e.action === "ping") return `${d.host} ×${d.count}${d.testState ? ` · ${d.testRawState || d.testState}` : ""}`;
   if (e.action === "speed_test" && d.testState) return d.testRawState || d.testState;
   if (e.action === "refresh") return d.scope;
+  if (e.action === "reboot" && d.downtimeSec !== undefined) return `${d.reason} · back after ${d.downtimeSec}s`;
   if (d.reason) return d.reason;
   return e.error || "";
 }
@@ -65,7 +67,7 @@ export default function TimelinePanel({ deviceId }) {
       </Card>
       <Card title="History" action={
         <select className="h-9 rounded-control border border-line px-2 text-sm" value={filter} onChange={e => setFilter(e.target.value)}>
-          <option value="all">All</option><option value="note">Notes</option><option value="action">Actions</option><option value="fault">Faults</option><option value="system">System</option>
+          <option value="all">All</option><option value="note">Notes</option><option value="action">Actions</option><option value="fault">Faults</option><option value="event">Device events</option><option value="system">System</option>
         </select>
       }>
         {!events && <p className="text-sm">Loading...</p>}
@@ -77,7 +79,7 @@ export default function TimelinePanel({ deviceId }) {
               <div className="min-w-0 text-sm">
                 <div className="flex flex-wrap items-center gap-2">
                   <span className="font-semibold text-plum">
-                    {e.type === "note" ? "Note" : e.type === "fault" ? "Fault" : e.type === "system" ? "Device" : ACTION[e.action] || e.action}
+                    {e.type === "note" ? "Note" : e.type === "fault" ? "Fault" : e.type === "system" ? "Device" : e.type === "event" ? EVENT_LABEL[e.event] || e.event : ACTION[e.action] || e.action}
                   </span>
                   {e.result && <Badge tone={RESULT[e.result]}>{e.result}</Badge>}
                   {e.user && <span className="text-xs text-ink-2">by {e.user}</span>}

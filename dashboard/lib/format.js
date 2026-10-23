@@ -26,3 +26,21 @@ export function onlineState(device) {
 
 export const apiError = (err, fallback) => err?.response?.data?.error || fallback;
 export const errTone = err => ([409, 429].includes(err?.response?.status) ? "warn" : "bad");
+
+export const EVENT_LABEL = {
+  registered: "Registered with ACS", boot: "Booted", online: "Back online", offline: "Went offline", wan_up: "WAN up", wan_down: "WAN down",
+  ppp_reconnect: "PPPoE reconnected", ip_change: "WAN IP changed", firmware_change: "Firmware changed"
+};
+export const EVENT_TONE = { boot: "warn", offline: "bad", wan_down: "bad", online: "ok", wan_up: "ok", ppp_reconnect: "warn", firmware_change: "warn" };
+
+export function describeEvent(e) {
+  const d = e.details || {};
+  if (e.type === "boot" || e.event === "boot") return d.cause === "acs_reboot" ? `After ACS reboot · down ${duration(d.downtimeSec)}` : "Unexpected (power cut or crash)";
+  if (d.from || d.to) return `${d.from ?? "—"} → ${d.to ?? "—"}`;
+  if (d.previousUptime) return `Session was up ${duration(d.previousUptime)}`;
+  if (d.lastInform) return `Last seen ${when(d.lastInform)}`;
+  return d.status || d.serialNumber || "";
+}
+
+export const ALERT_LABEL = { offline: "Offline", low_rx: "Low Rx", reboot_loop: "Reboot loop", unknown_device: "New device" };
+export const SEVERITY_TONE = { critical: "bad", warn: "warn", info: "muted" };

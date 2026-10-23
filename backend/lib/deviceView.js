@@ -392,4 +392,4 @@ function readiness(doc, s) {
   return { items, leafCount, valued, valuedPct, vendorExtensions: vendorExt, opticalCandidates };
 }
 
-module.exports = { summary, wifi, clients, lanPorts, wanConnections, readiness, learnedMap, resolveOptical, toDbm, gradeOptical, opticalModule, system };
+module.exports = { summary, wifi, clients, lanPorts, wanConnections, primaryWan, isUp, resolveScalar, readiness, learnedMap, resolveOptical, toDbm, gradeOptical, opticalModule, system };

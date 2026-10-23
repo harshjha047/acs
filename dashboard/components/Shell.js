@@ -1,10 +1,11 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/router";
-import { Router as RouterIcon, ScrollText, Users, LogOut } from "lucide-react";
+import { Router as RouterIcon, ScrollText, Users, LogOut, Siren } from "lucide-react";
 
 const nav = [
   { href: "/devices", label: "Devices", icon: RouterIcon },
+  { href: "/outage", label: "Outage & alerts", icon: Siren },
   { href: "/audit", label: "Audit log", icon: ScrollText },
   { href: "/users", label: "Users", icon: Users, roles: ["admin"] }
 ];

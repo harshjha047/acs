@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { useRouter } from "next/router";
 import api from "../../lib/api";
-import { ago, apiError, errTone } from "../../lib/format";
+import { ago, apiError, errTone, onlineState, ALERT_LABEL, SEVERITY_TONE } from "../../lib/format";
 import Shell from "../../components/Shell";
 import Card from "../../components/ui/Card";
 import Button from "../../components/ui/Button";
@@ -17,10 +17,12 @@ import ToolsPanel from "../../components/device/ToolsPanel";
 import TimelinePanel from "../../components/device/TimelinePanel";
 import ReadinessPanel from "../../components/device/ReadinessPanel";
 import ParamsTable from "../../components/device/ParamsTable";
+import TrendsPanel from "../../components/device/TrendsPanel";
 import CustomerLink from "../../components/device/CustomerLink";
 
 const TABS = [
   ["overview", "Overview"],
+  ["trends", "Trends & events"],
   ["wifi", "Wi-Fi & devices"],
   ["tools", "Tools"],
   ["timeline", "History & notes"],
@@ -57,6 +59,11 @@ export default function DeviceDetail() {
   }, [id]);
 
   useEffect(() => { load(); }, [load]);
+  useEffect(() => {
+    if (!id) return undefined;
+    const t = setInterval(() => api.get(`/devices/${id}`).then(({ data }) => setDevice(data)).catch(() => {}), 30000);
+    return () => clearInterval(t);
+  }, [id]);
   useEffect(() => { if (router.query.tab) setTab(String(router.query.tab)); }, [router.query.tab]);
 
   async function refresh() {
@@ -99,7 +106,7 @@ export default function DeviceDetail() {
     setReason("");
   }
 
-  const online = summary?.online.state;
+  const online = device ? onlineState(device) : null;
   const tabBtn = name => `whitespace-nowrap rounded-control px-4 py-2 text-sm font-semibold ${tab === name ? "bg-plum text-white" : "text-ink-2 hover:bg-white"}`;
 
   return (
@@ -114,7 +121,7 @@ export default function DeviceDetail() {
               <dl className="grid grid-cols-2 gap-6 md:grid-cols-5">
                 <Field label="Status">
                   <Badge tone={online === "online" ? "ok" : online === "offline" ? "bad" : "muted"}>{online || "…"}</Badge>
-                  <span className="ml-2 text-xs font-normal text-ink-2">{summary && ago(summary.lastInform)}</span>
+                  <span className="ml-2 text-xs font-normal text-ink-2">{ago(device.lastInformAt)}</span>
                 </Field>
                 <Field label="Manufacturer" value={device.manufacturer} />
                 <Field label="Model" value={device.productClass} />
@@ -128,6 +135,12 @@ export default function DeviceDetail() {
               </div>
             </div>
           </Card>
+
+          {device.alerts?.length > 0 && (
+            <div className="mb-4 flex flex-wrap gap-2">
+              {device.alerts.map(a => <Badge key={a._id} tone={SEVERITY_TONE[a.severity]}>{ALERT_LABEL[a.type] || a.type}: {a.message}</Badge>)}
+            </div>
+          )}
 
           <div className="mb-4 flex gap-2 overflow-x-auto">
             {TABS.map(([key, label]) => <button key={key} className={tabBtn(key)} onClick={() => setTab(key)}>{label}</button>)}
@@ -149,6 +162,7 @@ export default function DeviceDetail() {
               </div>
             </div>
           )}
+          {tab === "trends" && <TrendsPanel deviceId={id} />}
           {tab === "wifi" && <div key={version} className="grid gap-4"><WifiPanel deviceId={id} /><ClientsPanel deviceId={id} /></div>}
           {tab === "tools" && <ToolsPanel deviceId={id} />}
           {tab === "timeline" && <TimelinePanel key={version} deviceId={id} />}

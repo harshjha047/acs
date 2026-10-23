@@ -8,10 +8,14 @@ const Customer = require("../models/Customer");
 const AuditLog = require("../models/AuditLog");
 const rateLimit = require("express-rate-limit");
 const { requireAuth, requireRole } = require("../middleware/auth");
-const { rootOf, leaves, get, valueOf } = require("../lib/tree");
+const { rootOf, leaves, get } = require("../lib/tree");
 const { ROOTS } = require("../lib/catalog");
 const view = require("../lib/deviceView");
 const diag = require("../lib/diagnostics");
+const Alert = require("../models/Alert");
+const Telemetry = require("../models/Telemetry");
+const DeviceEvent = require("../models/DeviceEvent");
+const { series } = require("../lib/telemetry");
 
 router.use(requireAuth);
 
@@ -59,7 +63,6 @@ router.param("id", async (req, res, next, id) => {
 });
 
 const { isSensitive, mask } = require("../lib/sensitive");
-const DEVICE_ID_PROJECTION = ["_deviceId", "_lastInform"];
 const HOST_RE = /^(?=.{1,253}$)(([a-z0-9-]{1,63}\.)*[a-z0-9-]{1,63}|\d{1,3}(\.\d{1,3}){3}|[0-9a-f:]+)$/i;
 const escapeRe = s => s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 const statusFor = outcome => (outcome === "success" ? 200 : 202);
@@ -123,34 +126,6 @@ async function buildSummary(req, doc) {
 }
 
 router.get("/", async (req, res) => {
-  const genieDevices = await genie.listDevices({}, DEVICE_ID_PROJECTION);
-  if (genieDevices.length) {
-    await Device.bulkWrite(genieDevices.map(d => {
-      const id = d._deviceId || {};
-      return {
-        updateOne: {
-          filter: { genieacsDeviceId: d._id },
-          update: {
-            $setOnInsert: {
-              genieacsDeviceId: d._id,
-              serialNumber: id._SerialNumber || d._id,
-              manufacturer: id._Manufacturer || id._OUI || "unknown",
-              productClass: id._ProductClass || "unknown",
-              oui: id._OUI || "unknown"
-            },
-            ...(d._lastInform && { $set: { lastInformAt: new Date(d._lastInform) } }),
-            $unset: { removedAt: "" }
-          },
-          upsert: true
-        }
-      };
-    }), { ordered: false });
-  }
-  await Device.updateMany(
-    { genieacsDeviceId: { $nin: genieDevices.map(d => d._id) }, removedAt: null },
-    { $set: { removedAt: new Date() } }
-  );
-
   const q = String(req.query.q || "").trim().slice(0, 100);
   const filter = { removedAt: null };
   if (q) {
@@ -161,10 +136,36 @@ router.get("/", async (req, res) => {
       ...(customers.length ? [{ customer: { $in: customers.map(c => c._id) } }] : [])
     ];
   }
-  res.json(await Device.find(filter).populate("customer", "name phone accountId").sort({ lastInformAt: -1 }).limit(500).lean());
+  if (req.query.state === "online") filter.online = true;
+  if (req.query.state === "offline") filter.online = false;
+  if (req.query.state === "lowrx") filter.rxGrade = { $in: ["warn", "bad"] };
+  if (req.query.state === "alerts") filter._id = { $in: await Alert.distinct("device", { open: true }) };
+  const devices = await Device.find(filter, "-mon").populate("customer", "name phone accountId").sort({ lastInformAt: -1 }).limit(500).lean();
+  const alerts = await Alert.find({ open: true, device: { $in: devices.map(d => d._id) } }, "device type severity").lean();
+  const byDevice = Map.groupBy(alerts, a => String(a.device));
+  res.json(devices.map(d => ({ ...d, alerts: (byDevice.get(String(d._id)) || []).map(({ type, severity }) => ({ type, severity })) })));
 });
 
-router.get("/:id", async (req, res) => res.json(await req.device.populate("customer")));
+router.get("/:id", async (req, res) => {
+  const device = await req.device.populate("customer");
+  const alerts = await Alert.find({ device: req.device._id, open: true }).sort({ openedAt: -1 }).lean();
+  const { mon, ...rest } = device.toObject();
+  res.json({ ...rest, alerts });
+});
+
+router.get("/:id/telemetry", async (req, res) => {
+  const hours = Math.min(Math.max(Number(req.query.hours) || 24, 1), 720);
+  const since = new Date(Date.now() - hours * 3600 * 1000);
+  const [points, events] = await Promise.all([
+    Telemetry.find({ device: req.device._id, at: { $gte: since } }, "-_id -device").sort({ at: 1 }).lean(),
+    DeviceEvent.find({ device: req.device._id, at: { $gte: since } }, "-_id -device").sort({ at: -1 }).limit(500).lean()
+  ]);
+  res.json({ hours, points: series(points), events });
+});
+
+router.get("/:id/events", async (req, res) => {
+  res.json(await DeviceEvent.find({ device: req.device._id }, "-device").sort({ at: -1 }).limit(Math.min(Number(req.query.limit) || 200, 1000)).lean());
+});
 
 router.get("/:id/summary", async (req, res) => {
   const { summary } = await buildSummary(req, await loadTree(req));
@@ -412,20 +413,18 @@ router.post("/:id/notes", async (req, res) => {
 });
 
 router.get("/:id/timeline", async (req, res) => {
-  const [logs, notes, doc, faults] = await Promise.all([
+  const [logs, notes, devEvents, faults] = await Promise.all([
     AuditLog.find({ device: req.device._id }).sort({ timestamp: -1 }).limit(100).populate("user", "name").lean(),
     DeviceNote.find({ device: req.device._id }).sort({ createdAt: -1 }).limit(100).populate("user", "name").lean(),
-    genie.getDevice(req.device.genieacsDeviceId, ["_registered", "_lastInform", "InternetGatewayDevice.DeviceInfo.UpTime", "Device.DeviceInfo.UpTime"]).catch(() => null),
+    DeviceEvent.find({ device: req.device._id }).sort({ at: -1 }).limit(200).lean(),
     genie.getFaults(req.device.genieacsDeviceId).catch(() => [])
   ]);
   const events = [
     ...logs.map(l => ({ type: "action", at: l.timestamp, action: l.action, result: l.result, user: l.user?.name, details: l.details, error: l.errorMessage })),
     ...notes.map(n => ({ type: "note", at: n.createdAt, user: n.user?.name, text: n.text })),
-    ...faults.map(f => ({ type: "fault", at: f.timestamp, code: f.code, message: f.message, detail: f.detail?.faultString || null }))
+    ...faults.map(f => ({ type: "fault", at: f.timestamp, code: f.code, message: f.message, detail: f.detail?.faultString || null })),
+    ...devEvents.map(e => ({ type: "event", at: e.at, event: e.type, details: e.details }))
   ];
-  if (doc?._registered) events.push({ type: "system", at: doc._registered, text: "First connected to ACS" });
-  const uptime = Number(valueOf(get(doc || {}, "InternetGatewayDevice.DeviceInfo.UpTime")) ?? valueOf(get(doc || {}, "Device.DeviceInfo.UpTime")));
-  if (doc?._lastInform && Number.isFinite(uptime)) events.push({ type: "system", at: new Date(Date.parse(doc._lastInform) - uptime * 1000), text: "Device booted" });
   res.json(events.sort((a, b) => new Date(b.at) - new Date(a.at)));
 });
 

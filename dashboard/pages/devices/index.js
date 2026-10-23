@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import api from "../../lib/api";
-import { ago, gradeTone, onlineState } from "../../lib/format";
+import { ago, gradeTone, onlineState, ALERT_LABEL, SEVERITY_TONE } from "../../lib/format";
 import Shell from "../../components/Shell";
 import Card from "../../components/ui/Card";
 import Badge from "../../components/ui/Badge";
@@ -14,17 +14,19 @@ export default function DeviceList() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [q, setQ] = useState("");
+  const [filter, setFilter] = useState("");
 
   useEffect(() => {
     setLoading(true);
-    const t = setTimeout(() => {
-      api.get("/devices", { params: q.trim() ? { q: q.trim() } : {} })
-        .then(({ data }) => { setDevices(data); setError(""); })
-        .catch(() => setError("Failed to load devices"))
-        .finally(() => setLoading(false));
-    }, q ? 300 : 0);
-    return () => clearTimeout(t);
-  }, [q]);
+    const params = { ...(q.trim() && { q: q.trim() }), ...(filter && { state: filter }) };
+    const fetchList = () => api.get("/devices", { params })
+      .then(({ data }) => { setDevices(data); setError(""); })
+      .catch(() => setError("Failed to load devices"))
+      .finally(() => setLoading(false));
+    const t = setTimeout(fetchList, q ? 300 : 0);
+    const poll = setInterval(fetchList, 30000);
+    return () => { clearTimeout(t); clearInterval(poll); };
+  }, [q, filter]);
 
   const offline = devices.filter(d => onlineState(d) === "offline").length;
 
@@ -38,6 +40,9 @@ export default function DeviceList() {
           placeholder="Search customer name, phone, account ID, PPPoE user, serial, MAC or IP"
           className="h-12 w-full max-w-xl rounded-control border border-line bg-white px-4 text-sm outline-none focus:border-plum"
         />
+        <select value={filter} onChange={e => setFilter(e.target.value)} className="h-12 rounded-control border border-line bg-white px-3 text-sm">
+          <option value="">All</option><option value="online">Online</option><option value="offline">Offline</option><option value="alerts">With alerts</option><option value="lowrx">Rx warn/bad</option>
+        </select>
         {!loading && <span className="text-sm text-ink-2">{devices.length} devices{offline ? ` · ${offline} offline` : ""}</span>}
       </div>
       <Card>
@@ -45,12 +50,13 @@ export default function DeviceList() {
         {error && <p className="text-sm font-semibold text-bad">{error}</p>}
         {!loading && !error && devices.length === 0 && <p className="text-sm text-ink-2">{q ? "No matches." : "No devices have connected yet."}</p>}
         {devices.length > 0 && (
-          <Table head={["Status", "Customer", "PPPoE / IP", "Serial", "Model", "Rx", "Last seen", ""]}>
+          <Table head={["Status", "Alerts", "Customer", "PPPoE / IP", "Serial", "Model", "Rx", "Last seen", ""]}>
             {devices.map(d => {
               const state = onlineState(d);
               return (
                 <Row key={d._id}>
                   <Cell><Badge tone={tone[state]}>{state}</Badge></Cell>
+                  <Cell>{d.alerts?.length ? <div className="flex flex-wrap gap-1">{d.alerts.map(a => <Badge key={a.type} tone={SEVERITY_TONE[a.severity]}>{ALERT_LABEL[a.type] || a.type}</Badge>)}</div> : null}</Cell>
                   <Cell>{d.customer ? <><div className="font-semibold text-plum">{d.customer.name}</div><div className="font-mono text-xs text-ink-2">{d.customer.accountId}</div></> : <span className="text-ink-3">unlinked</span>}</Cell>
                   <Cell mono>{d.pppoeUsername || d.wanIp}</Cell>
                   <Cell mono>{d.serialNumber}</Cell>

@@ -2,11 +2,14 @@ const axios = require("axios");
 
 const nbi = axios.create({ baseURL: process.env.GENIEACS_NBI_URL, timeout: 10000 });
 
-async function listDevices(query = {}, projection = []) {
+async function listDevices(query = {}, projection = [], { skip, limit, sort } = {}) {
   const params = {};
   if (Object.keys(query).length) params.query = JSON.stringify(query);
   if (projection.length) params.projection = projection.join(",");
-  const { data } = await nbi.get("/devices", { params });
+  if (sort) params.sort = JSON.stringify(sort);
+  if (skip) params.skip = skip;
+  if (limit) params.limit = limit;
+  const { data } = await nbi.get("/devices", { params, timeout: 60000 });
   return data;
 }
 
