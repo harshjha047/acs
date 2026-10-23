@@ -26,8 +26,15 @@ async function hardwareVersion(device) {
   return null;
 }
 
-async function finishJob(job, patch) {
+async function clearTask(genieacsDeviceId, taskId) {
+  if (!taskId) return;
+  await genie.deleteTask(taskId).catch(() => false);
+  if (genieacsDeviceId) await genie.deleteFault(`${genieacsDeviceId}:task_${taskId}`).catch(() => false);
+}
+
+async function finishJob(job, patch, genieacsDeviceId) {
   await Job.updateOne({ _id: job._id }, { $set: patch });
+  if (patch.state === "failed") await clearTask(genieacsDeviceId, job.taskId);
   if (job.auditId && ["applied", "failed", "skipped"].includes(patch.state)) {
     await AuditLog.updateOne({ _id: job.auditId }, {
       $set: { result: patch.state === "applied" ? "success" : "failed", "details.state": patch.state, ...(patch.error && { errorMessage: patch.error }) }
@@ -73,7 +80,7 @@ async function check(job, now) {
   }
   const next = fw.nextJobState(job, { device, taskPending, fault, now, applyTimeoutMs: APPLY_MS(), pickupTimeoutMs: PICKUP_MS() });
   if (!next) return null;
-  if (fw.TERMINAL.includes(next.state)) await finishJob(job, next);
+  if (fw.TERMINAL.includes(next.state)) await finishJob(job, next, device?.genieacsDeviceId);
   else await Job.updateOne({ _id: job._id }, { $set: next });
   return next.state;
 }
@@ -136,11 +143,17 @@ async function advance(rollout, now) {
   return null;
 }
 
+const taskFault = (id, taskId) => genie.getFaults(id).then(fs => fs.find(f => f._id === `${id}:task_${taskId}`) || null, () => null);
+
 async function closeFactoryResets(now) {
   const pending = await AuditLog.find({ action: "factory_reset", result: "pending" }).lean();
   for (const log of pending) {
     const device = await Device.findById(log.device).select("+provisioning.overrides").lean();
-    if (device?.lastBootAt && device.lastBootAt > log.timestamp && device.online) {
+    const fault = log.details?.taskId && device ? await taskFault(device.genieacsDeviceId, log.details.taskId) : null;
+    if (fault) {
+      await clearTask(device.genieacsDeviceId, log.details.taskId);
+      await AuditLog.updateOne({ _id: log._id }, { $set: { result: "failed", errorMessage: `Device rejected factory reset: ${fault.code} ${fault.detail?.faultString || fault.message || ""}`.trim() } });
+    } else if (device?.lastBootAt && device.lastBootAt > log.timestamp && device.online) {
       const downtimeSec = Math.max(0, Math.round((device.lastBootAt - Math.max(+log.timestamp, +new Date(log.details?.executedAt || 0))) / 1000));
       let reprovision = null;
       if (log.details?.reprovision && device.provisioning?.template) {

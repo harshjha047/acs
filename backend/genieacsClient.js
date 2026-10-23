@@ -57,6 +57,11 @@ async function deleteTask(taskId) {
   return res.status < 400;
 }
 
+async function deleteFault(faultId) {
+  const res = await nbi.delete(`/faults/${encodeURIComponent(faultId)}`, { validateStatus: s => s < 500 });
+  return res.status < 400;
+}
+
 async function putFile(fileName, body, { fileType, oui, productClass, version, length }) {
   const res = await nbi.put(`/files/${encodeURIComponent(fileName)}`, body, {
     headers: { "Content-Type": "application/octet-stream", fileType, oui: oui || "", productClass, version, ...(length && { "Content-Length": length }) },
@@ -82,4 +87,4 @@ const refreshObject = (id, objectName, options) => queueTask(id, { name: "refres
 const getParameterValues = (id, parameterNames, options) => queueTask(id, { name: "getParameterValues", parameterNames }, options);
 const setParameterValues = (id, parameterValues, options) => queueTask(id, { name: "setParameterValues", parameterValues }, options);
 
-module.exports = { listDevices, deleteDevice, getTasks, deleteTask, putFile, deleteFile, listFiles, download, factoryReset, getDevice, queueTask, queueTasks, getFaults, reboot, refreshObject, getParameterValues, setParameterValues };
+module.exports = { listDevices, deleteDevice, getTasks, deleteTask, deleteFault, putFile, deleteFile, listFiles, download, factoryReset, getDevice, queueTask, queueTasks, getFaults, reboot, refreshObject, getParameterValues, setParameterValues };
