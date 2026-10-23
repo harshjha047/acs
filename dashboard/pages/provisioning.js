@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 import api from "../lib/api";
+import { useUser, can } from "../lib/session";
 import { apiError, when, PROV_TONE, PROV_LABEL } from "../lib/format";
 import Shell from "../components/Shell";
 import Card from "../components/ui/Card";
@@ -25,7 +26,7 @@ function wifiSummary(t) {
 
 export default function Provisioning() {
   const toast = useToast();
-  const [role, setRole] = useState(null);
+  const user = useUser();
   const [templates, setTemplates] = useState([]);
   const [pres, setPres] = useState([]);
   const [status, setStatus] = useState("waiting");
@@ -38,7 +39,6 @@ export default function Provisioning() {
   const loadPres = useCallback(() => api.get("/preregistrations", { params: { status: status || undefined, q: q || undefined } }).then(({ data }) => setPres(data)).catch(() => {}), [status, q]);
 
   useEffect(() => {
-    setRole(JSON.parse(localStorage.getItem("user") || "null")?.role);
     loadTemplates();
   }, [loadTemplates]);
 
@@ -48,8 +48,9 @@ export default function Provisioning() {
     return () => { clearTimeout(t); clearInterval(poll); };
   }, [loadPres, q]);
 
-  const isAdmin = role === "admin";
-  const canWrite = role === "noc" || isAdmin;
+  const isAdmin = can(user, "template.write");
+  const canWrite = can(user, "prereg.write");
+  const canSecret = can(user, "secret.view");
 
   const save = form => run(async () => {
     try {
@@ -141,7 +142,7 @@ export default function Provisioning() {
                   </> : null}</Cell>
                   <Cell>{when(p.createdAt)}<div className="text-xs text-ink-2">{p.createdBy?.name}</div></Cell>
                   <Cell className="space-x-2 whitespace-nowrap text-right">
-                    {canWrite && p.template && <Button variant="secondary" className="min-h-9 px-3" disabled={busy} onClick={() => reveal(p)}>Password</Button>}
+                    {canSecret && p.template && <Button variant="secondary" className="min-h-9 px-3" disabled={busy} onClick={() => reveal(p)}>Password</Button>}
                     {canWrite && p.status === "waiting" && <Button variant="secondary" className="min-h-9 px-3" disabled={busy} onClick={() => cancelPre(p)}>Cancel</Button>}
                   </Cell>
                 </Row>

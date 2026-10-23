@@ -78,6 +78,8 @@ Every CPE must send `CWMP_USER` / `CWMP_PASS` (set in `.env`). Devices without t
 
 Rollback: `docker compose exec api node scripts/setCwmpAuth.js --off && docker compose restart genieacs-cwmp`
 
+OUI allow-list (rejects any device whose Inform OUI isn't listed, even with valid credentials): set `CWMP_OUIS=00177C,202BC1` in `.env`, `docker compose up -d api`, then rerun `setCwmpAuth.js` and restart `genieacs-cwmp`. `--oui A,B` overrides the env. Add new vendors' OUIs **before** the OLT pushes the ACS URL to them.
+
 CPE ACS URL, in order of preference:
 
 | URL | Auth | Notes |
@@ -137,3 +139,12 @@ Restore: `rclone copy gdrive-crypt:mongo-<date>.archive.gz /tmp/ && docker compo
 - Optional API env: `FIRMWARE_MAX_MB` (256), `FIRMWARE_WINDOW_TZ` (Asia/Kolkata), `FIRMWARE_MAX_SEND` (20/min), `FIRMWARE_APPLY_TIMEOUT_MIN` (60), `FIRMWARE_PICKUP_TIMEOUT_H` (24).
 - Enable a model: `docker compose exec api node scripts/setProfile.js "<Mfr>" "<Class>" --firmware on`.
 - Procedure and recovery: `docs/Firmware-Runbook.md`.
+
+## Security (Batch 7)
+
+- Permissions: `backend/lib/permissions.js` (role → permission map). Agents are read-only on devices (plus notes and customer links); refresh, diagnostics and Wi-Fi need `noc`. Grant extras without code: `PERMS_GRANT=agent:diagnostics.run`.
+- 2FA (TOTP) is required for `MFA_REQUIRED_ROLES` (default `noc,admin`). Users without it are sent to **My account** to enrol; the API answers 403 `mfaSetupRequired` until they do. Secrets are AES-256-GCM encrypted with `MFA_ENC_KEY` (falls back to `JWT_SECRET`).
+- Lost phone / locked-out admin: `docker compose exec api node scripts/resetMfa.js <email>` (clears 2FA + lock, signs out all sessions).
+- Sessions: tokens carry `tv` (token version). Password change, role change, disable, 2FA reset, "Sign out everywhere" and `seedAdmin.js` bump it, ending existing sessions.
+- Sign-in: 10 attempts / 15 min per IP; per account, 5 free failures then a lock of 1, 2, 4 … 60 min. Every attempt is in `loginevents` (180 d), shown on **Users → Sign-in activity**. Admins can unlock.
+- CI runs `npm audit --omit=dev --audit-level=high`; Dependabot opens weekly update PRs.

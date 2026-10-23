@@ -3,7 +3,7 @@ const { isValidObjectId } = require("mongoose");
 const Alert = require("../models/Alert");
 const Device = require("../models/Device");
 const DeviceEvent = require("../models/DeviceEvent");
-const { requireAuth, requireRole } = require("../middleware/auth");
+const { requireAuth, requirePerm } = require("../middleware/auth");
 const { clusters } = require("../lib/telemetry");
 const monitor = require("../lib/monitor");
 
@@ -18,7 +18,7 @@ router.get("/alerts", requireAuth, async (req, res) => {
   res.json(alerts);
 });
 
-router.post("/alerts/:alertId/ack", requireAuth, requireRole("noc", "admin"), async (req, res) => {
+router.post("/alerts/:alertId/ack", requireAuth, requirePerm("alert.ack"), async (req, res) => {
   if (!isValidObjectId(req.params.alertId)) return res.status(400).json({ error: "Invalid alert id" });
   const alert = await Alert.findById(req.params.alertId);
   if (!alert) return res.status(404).json({ error: "Alert not found" });
@@ -49,8 +49,8 @@ router.get("/outage", requireAuth, async (req, res) => {
   });
 });
 
-router.get("/system/health", requireAuth, requireRole("noc", "admin"), async (req, res) => res.json(await require("../lib/health").report()));
+router.get("/system/health", requireAuth, requirePerm("system.view"), async (req, res) => res.json(await require("../lib/health").report()));
 
-router.post("/monitor/run", requireAuth, requireRole("admin"), async (req, res) => res.json(await monitor.run()));
+router.post("/monitor/run", requireAuth, requirePerm("monitor.run"), async (req, res) => res.json(await monitor.run()));
 
 module.exports = router;

@@ -11,9 +11,14 @@ api.interceptors.request.use(config => {
 api.interceptors.response.use(
   res => res,
   err => {
-    if (err.response?.status === 401 && typeof window !== "undefined") {
-      localStorage.removeItem("token");
-      window.location.href = "/login";
+    if (typeof window !== "undefined" && !err.config?.url?.startsWith("/auth/login") && !err.config?.url?.startsWith("/auth/mfa/verify")) {
+      if (err.response?.status === 401) {
+        localStorage.removeItem("token");
+        localStorage.removeItem("user");
+        window.location.href = "/login";
+      } else if (err.response?.data?.mfaSetupRequired && window.location.pathname !== "/account") {
+        window.location.href = "/account";
+      }
     }
     return Promise.reject(err);
   }

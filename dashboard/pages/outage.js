@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 import api from "../lib/api";
+import { useUser, can } from "../lib/session";
 import { ago, apiError, when, EVENT_LABEL, EVENT_TONE, describeEvent, ALERT_LABEL, SEVERITY_TONE } from "../lib/format";
 import Shell from "../components/Shell";
 import Card from "../components/ui/Card";
@@ -24,9 +25,8 @@ export default function Outage() {
   const toast = useToast();
   const [data, setData] = useState(null);
   const [alerts, setAlerts] = useState([]);
-  const [role, setRole] = useState(null);
+  const user = useUser();
 
-  useEffect(() => { setRole(JSON.parse(localStorage.getItem("user") || "null")?.role || null); }, []);
 
   const load = useCallback(() => Promise.all([api.get("/outage"), api.get("/alerts")])
     .then(([o, a]) => { setData(o.data); setAlerts(a.data); })
@@ -83,7 +83,7 @@ export default function Outage() {
                     <Cell>{a.device ? <Link className="font-semibold text-plum underline" href={`/devices/${a.device._id}`}>{customerOf(a.device)}</Link> : "—"}</Cell>
                     <Cell>{a.message}{a.ackBy && <div className="text-xs text-ink-2">ack by {a.ackBy.name} {ago(a.ackAt)}</div>}</Cell>
                     <Cell>{ago(a.openedAt)}</Cell>
-                    <Cell className="text-right">{!a.ackAt && (role === "noc" || role === "admin") && <Button variant="secondary" onClick={() => ack(a)}>Ack</Button>}</Cell>
+                    <Cell className="text-right">{!a.ackAt && can(user, "alert.ack") && <Button variant="secondary" onClick={() => ack(a)}>Ack</Button>}</Cell>
                   </Row>
                 ))}
               </Table>

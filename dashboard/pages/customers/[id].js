@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/router";
 import api from "../../lib/api";
+import { useUser, can } from "../../lib/session";
 import { ago, apiError, onlineState, when, PROV_TONE, PROV_LABEL } from "../../lib/format";
 import Shell from "../../components/Shell";
 import Card from "../../components/ui/Card";
@@ -24,7 +25,7 @@ export default function CustomerPage() {
   const [error, setError] = useState("");
   const [editing, setEditing] = useState(false);
   const [preReg, setPreReg] = useState(false);
-  const [role, setRole] = useState(null);
+  const user = useUser();
   const [busy, run] = useAction();
 
   const load = useCallback(() => {
@@ -33,7 +34,6 @@ export default function CustomerPage() {
   }, [id]);
 
   useEffect(() => {
-    setRole(JSON.parse(localStorage.getItem("user") || "null")?.role);
     load();
   }, [load]);
 
@@ -59,7 +59,7 @@ export default function CustomerPage() {
     }
   });
 
-  const canWrite = role === "noc" || role === "admin";
+  const canWrite = can(user, "prereg.write");
 
   return (
     <Shell title={c ? c.name : "Customer"}>
@@ -70,7 +70,7 @@ export default function CustomerPage() {
           <Card title="Details" action={
             <div className="flex gap-2">
               <Button variant="secondary" onClick={() => setEditing(true)}>Edit</Button>
-              {role === "admin" && <Button variant="secondary" loading={busy} onClick={remove}>Delete</Button>}
+              {can(user, "customer.delete") && <Button variant="secondary" loading={busy} onClick={remove}>Delete</Button>}
             </div>
           }>
             <dl className="grid grid-cols-2 gap-6 md:grid-cols-5">

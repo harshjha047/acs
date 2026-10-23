@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from "react";
 import api from "../../lib/api";
+import { useUser, can } from "../../lib/session";
 import { apiError, errTone, gradeTone } from "../../lib/format";
 import Card from "../ui/Card";
 import Badge from "../ui/Badge";
@@ -9,6 +10,7 @@ import { useToast } from "../ui/Toast";
 import LanPorts from "./LanPorts";
 
 export default function ClientsPanel({ deviceId }) {
+  const canRefresh = can(useUser(), "device.refresh");
   const toast = useToast();
   const [data, setData] = useState(null);
   const [error, setError] = useState("");
@@ -37,7 +39,7 @@ export default function ClientsPanel({ deviceId }) {
     <div className="grid gap-4">
       <Card
         title={`Connected devices (${rows.filter(c => c.active !== false).length} active / ${rows.length})`}
-        action={<Button variant="secondary" loading={busy} onClick={refresh}>{busy ? "Fetching…" : "Fetch live list"}</Button>}
+        action={canRefresh && <Button variant="secondary" loading={busy} onClick={refresh}>{busy ? "Fetching…" : "Fetch live list"}</Button>}
       >
         {error && <p className="text-sm font-semibold text-bad">{error}</p>}
         {!data && !error && <p className="text-sm">Loading...</p>}

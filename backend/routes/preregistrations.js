@@ -5,7 +5,7 @@ const Template = require("../models/ProvisioningTemplate");
 const Customer = require("../models/Customer");
 const provisioner = require("../lib/provisioner");
 const p = require("../lib/provisioning");
-const { requireAuth, requireRole } = require("../middleware/auth");
+const { requireAuth, requirePerm } = require("../middleware/auth");
 
 router.use(requireAuth);
 
@@ -52,7 +52,7 @@ async function resolveCustomer(body) {
   }
 }
 
-router.post("/", requireRole("noc", "admin"), async (req, res) => {
+router.post("/", requirePerm("prereg.write"), async (req, res) => {
   const b = req.body || {};
   const serialNumber = p.normSerial(b.serialNumber);
   const macAddress = p.normMac(b.macAddress);
@@ -77,14 +77,14 @@ router.post("/", requireRole("noc", "admin"), async (req, res) => {
   res.status(201).json({ ...out, wifiPassword: wifiPassword || null });
 });
 
-router.post("/:id/cancel", requireRole("noc", "admin"), async (req, res) => {
+router.post("/:id/cancel", requirePerm("prereg.write"), async (req, res) => {
   if (req.pre.status !== "waiting") return res.status(409).json({ error: `Already ${req.pre.status}` });
   req.pre.status = "cancelled";
   await req.pre.save();
   res.json(req.pre);
 });
 
-router.get("/:id/secret", requireRole("noc", "admin"), async (req, res) => {
+router.get("/:id/secret", requirePerm("secret.view"), async (req, res) => {
   const pre = await PreRegistration.findById(req.pre._id).select("+wifiPassword");
   pre.revealed.push({ user: req.user.id, at: new Date() });
   await pre.save();

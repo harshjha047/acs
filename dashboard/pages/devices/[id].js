@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { useRouter } from "next/router";
 import api from "../../lib/api";
+import { useUser, can } from "../../lib/session";
 import { ago, apiError, errTone, onlineState, ALERT_LABEL, SEVERITY_TONE } from "../../lib/format";
 import Shell from "../../components/Shell";
 import Card from "../../components/ui/Card";
@@ -44,9 +45,8 @@ export default function DeviceDetail() {
   const [confirm, setConfirm] = useState(null);
   const [reason, setReason] = useState("");
   const [version, setVersion] = useState(0);
-  const [role, setRole] = useState(null);
+  const user = useUser();
 
-  useEffect(() => { setRole(JSON.parse(localStorage.getItem("user") || "null")?.role || null); }, []);
 
   const load = useCallback(async () => {
     if (!id) return;
@@ -131,9 +131,9 @@ export default function DeviceDetail() {
                 <Field label="Customer"><CustomerLink device={device} onChange={setDevice} /></Field>
               </dl>
               <div className="flex flex-wrap gap-2">
-                <Button variant="secondary" loading={busy === "refresh"} disabled={!!busy} onClick={refresh}>{busy === "refresh" ? "Fetching…" : "Refresh live"}</Button>
-                {(role === "noc" || role === "admin") && <Button variant="danger" disabled={!!busy} onClick={() => setConfirm("reboot")}>Reboot</Button>}
-                {role === "admin" && <Button variant="secondary" disabled={!!busy} onClick={() => setConfirm("remove")}>Remove</Button>}
+                {can(user, "device.refresh") && <Button variant="secondary" loading={busy === "refresh"} disabled={!!busy} onClick={refresh}>{busy === "refresh" ? "Fetching…" : "Refresh live"}</Button>}
+                {can(user, "device.reboot") && <Button variant="danger" disabled={!!busy} onClick={() => setConfirm("reboot")}>Reboot</Button>}
+                {can(user, "device.delete") && <Button variant="secondary" disabled={!!busy} onClick={() => setConfirm("remove")}>Remove</Button>}
               </div>
             </div>
           </Card>
@@ -161,8 +161,8 @@ export default function DeviceDetail() {
                     <Field label="Wi-Fi on" value={summary.wifi.filter(w => w.enabled).map(w => w.ssid).join(", ") || (summary.wifi.some(w => w.enabled === null) ? "unknown" : "none")} />
                   </dl>
                 </Card>
-                <ProvisionCard deviceId={id} role={role} />
-                {(role === "noc" || role === "admin") && <FirmwareCard deviceId={id} serial={device?.serialNumber} role={role} />}
+                <ProvisionCard deviceId={id} user={user} />
+                {can(user, "firmware.view") && <FirmwareCard deviceId={id} serial={device?.serialNumber} user={user} />}
               </div>
             </div>
           )}

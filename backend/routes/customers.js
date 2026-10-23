@@ -3,7 +3,7 @@ const { isValidObjectId } = require("mongoose");
 const Customer = require("../models/Customer");
 const Device = require("../models/Device");
 const PreRegistration = require("../models/PreRegistration");
-const { requireAuth, requireRole } = require("../middleware/auth");
+const { requireAuth, requirePerm } = require("../middleware/auth");
 
 router.use(requireAuth);
 
@@ -25,7 +25,7 @@ router.get("/", async (req, res) => {
   res.json(customers.map(c => ({ ...c, devices: byId.get(String(c._id))?.devices || 0, online: byId.get(String(c._id))?.online || 0 })));
 });
 
-router.post("/", async (req, res) => {
+router.post("/", requirePerm("customer.write"), async (req, res) => {
   const data = pick(req.body);
   if (!data.name || !data.accountId) return res.status(400).json({ error: "Name and account ID are required" });
   try {
@@ -47,14 +47,14 @@ router.get("/:id", async (req, res) => {
   res.json({ ...customer, devices, preRegistrations });
 });
 
-router.patch("/:id", async (req, res) => {
+router.patch("/:id", requirePerm("customer.write"), async (req, res) => {
   if (!isValidObjectId(req.params.id)) return res.status(400).json({ error: "Invalid id" });
   const customer = await Customer.findByIdAndUpdate(req.params.id, pick(req.body), { new: true, runValidators: true });
   if (!customer) return res.status(404).json({ error: "Customer not found" });
   res.json(customer);
 });
 
-router.delete("/:id", requireRole("admin"), async (req, res) => {
+router.delete("/:id", requirePerm("customer.delete"), async (req, res) => {
   if (!isValidObjectId(req.params.id)) return res.status(400).json({ error: "Invalid id" });
   const [devices, waiting] = await Promise.all([
     Device.exists({ customer: req.params.id, removedAt: null }),

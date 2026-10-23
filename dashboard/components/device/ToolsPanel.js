@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from "react";
 import api from "../../lib/api";
+import { useUser, can } from "../../lib/session";
 import usePoll from "../../lib/usePoll";
 import { apiError, errTone, when } from "../../lib/format";
 import Card from "../ui/Card";
@@ -85,7 +86,8 @@ export default function ToolsPanel({ deviceId }) {
   const upload = useDiagnostic(deviceId, "upload");
   const p = ping.poll.data, t = trace.poll.data;
   const busy = [ping, trace, speed, upload].some(d => d.poll.polling);
-  const off = key => !!caps?.[key] && !caps[key].supported;
+  const allowed = can(useUser(), "diagnostics.run");
+  const off = key => !allowed || (!!caps?.[key] && !caps[key].supported);
 
   useEffect(() => {
     api.get(`/devices/${deviceId}/capabilities`).then(r => setCaps(r.data)).catch(() => setCaps({}));
@@ -93,6 +95,7 @@ export default function ToolsPanel({ deviceId }) {
 
   return (
     <div className="grid gap-4">
+      {!allowed && <p className="rounded-card border border-line bg-white px-5 py-3 text-sm text-ink-2">Running tests needs a NOC or admin account. You can still view the latest results.</p>}
       {caps?.instantActions && !caps.instantActions.supported && (
         <p className="rounded-card border border-line bg-white px-5 py-3 text-sm text-ink-2">
           <Badge tone="warn">Queued mode</Badge> <span className="ml-2">{caps.instantActions.detail}. One test at a time; each runs within one inform interval.</span>

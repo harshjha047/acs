@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from "react";
 import api from "../../lib/api";
+import { can } from "../../lib/session";
 import { apiError, errTone, input, when, FW_TONE, FW_LABEL } from "../../lib/format";
 import Card from "../ui/Card";
 import Badge from "../ui/Badge";
@@ -10,13 +11,14 @@ import useAction from "../../lib/useAction";
 
 const RESULT_TONE = { success: "ok", failed: "bad", pending: "warn" };
 
-export default function FirmwareCard({ deviceId, serial, role }) {
+export default function FirmwareCard({ deviceId, serial, user }) {
   const toast = useToast();
   const [f, setF] = useState(null);
   const [modal, setModal] = useState(null);
   const [form, setForm] = useState({ releaseId: "", reason: "", confirmSerial: "", reprovision: true });
   const [busy, run] = useAction();
-  const isAdmin = role === "admin";
+  const canDeploy = can(user, "firmware.deploy");
+  const canReset = can(user, "factoryReset.execute");
 
   const load = useCallback(() => api.get(`/devices/${deviceId}/firmware`).then(({ data }) => setF(data)).catch(() => {}), [deviceId]);
   useEffect(() => {
@@ -51,10 +53,10 @@ export default function FirmwareCard({ deviceId, serial, role }) {
   const set = k => e => setForm({ ...form, [k]: e.target.type === "checkbox" ? e.target.checked : e.target.value });
 
   return (
-    <Card title="Firmware" action={isAdmin && (
+    <Card title="Firmware" action={(canDeploy || canReset) && (
       <div className="flex gap-2">
-        <Button variant="secondary" className="min-h-9 px-3" disabled={!!f.active || !f.supported || !eligible.length} onClick={() => setModal("push")}>Upgrade</Button>
-        <Button variant="danger" className="min-h-9 px-3" disabled={!!f.active} onClick={() => setModal("reset")}>Factory reset</Button>
+        {canDeploy && <Button variant="secondary" className="min-h-9 px-3" disabled={!!f.active || !f.supported || !eligible.length} onClick={() => setModal("push")}>Upgrade</Button>}
+        {canReset && <Button variant="danger" className="min-h-9 px-3" disabled={!!f.active} onClick={() => setModal("reset")}>Factory reset</Button>}
       </div>
     )}>
       <div className="grid gap-3 text-sm">

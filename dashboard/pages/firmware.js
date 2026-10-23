@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 import api from "../lib/api";
+import { useUser, can } from "../lib/session";
 import { apiError, errTone, input, when, FW_TONE, FW_LABEL, ROLLOUT_TONE } from "../lib/format";
 import Shell from "../components/Shell";
 import Card from "../components/ui/Card";
@@ -37,7 +38,7 @@ function Progress({ jobs = {} }) {
 
 export default function Firmware() {
   const toast = useToast();
-  const [role, setRole] = useState(null);
+  const user = useUser();
   const [releases, setReleases] = useState([]);
   const [rollouts, setRollouts] = useState([]);
   const [up, setUp] = useState(null);
@@ -47,7 +48,8 @@ export default function Firmware() {
   const [detail, setDetail] = useState(null);
   const [halt, setHalt] = useState(null);
   const [busy, run] = useAction();
-  const isAdmin = role === "admin";
+  const isAdmin = can(user, "firmware.manage");
+  const canDeploy = can(user, "firmware.deploy");
 
   const load = useCallback(() => Promise.all([
     api.get("/firmware/releases").then(({ data }) => setReleases(data)),
@@ -55,7 +57,6 @@ export default function Firmware() {
   ]).catch(err => toast(apiError(err, "Failed to load"), "bad")), [toast]);
 
   useEffect(() => {
-    setRole(JSON.parse(localStorage.getItem("user") || "null")?.role);
     load();
     const t = setInterval(load, 30000);
     return () => clearInterval(t);
@@ -163,7 +164,7 @@ export default function Firmware() {
           {!releases.length && <p className="py-4 text-sm text-ink-3">No releases yet.</p>}
         </Card>
 
-        <Card title="Rollouts" action={isAdmin && <Button disabled={!releases.some(r => r.status === "approved")} onClick={() => setRo(EMPTY_RO)}>New rollout</Button>}>
+        <Card title="Rollouts" action={canDeploy && <Button disabled={!releases.some(r => r.status === "approved")} onClick={() => setRo(EMPTY_RO)}>New rollout</Button>}>
           <Table head={["Release", "Target", "Wave", "Progress", "Status", ""]}>
             {rollouts.map(r => (
               <Row key={r._id}>
@@ -175,11 +176,11 @@ export default function Firmware() {
                 <Cell>
                   <div className="flex flex-wrap gap-2">
                     <Button variant="secondary" className="min-h-9 px-3" onClick={() => openDetail(r)}>Details</Button>
-                    {isAdmin && r.status === "draft" && <Button className="min-h-9 px-3" disabled={busy} onClick={() => op(r, "start")}>Start</Button>}
-                    {isAdmin && r.status === "running" && <Button variant="secondary" className="min-h-9 px-3" disabled={busy} onClick={() => op(r, "pause")}>Pause</Button>}
-                    {isAdmin && r.status === "paused" && <Button variant="secondary" className="min-h-9 px-3" disabled={busy} onClick={() => op(r, "resume")}>Resume</Button>}
-                    {isAdmin && r.status === "paused" && r.currentWave < r.waves.length - 1 && <Button className="min-h-9 px-3" disabled={busy} onClick={() => op(r, "promote")}>Promote to wave {r.currentWave + 2}</Button>}
-                    {isAdmin && ["draft", "running", "paused"].includes(r.status) && <Button variant="danger" className="min-h-9 px-3" disabled={busy} onClick={() => setHalt({ r, note: "" })}>Halt</Button>}
+                    {canDeploy && r.status === "draft" && <Button className="min-h-9 px-3" disabled={busy} onClick={() => op(r, "start")}>Start</Button>}
+                    {canDeploy && r.status === "running" && <Button variant="secondary" className="min-h-9 px-3" disabled={busy} onClick={() => op(r, "pause")}>Pause</Button>}
+                    {canDeploy && r.status === "paused" && <Button variant="secondary" className="min-h-9 px-3" disabled={busy} onClick={() => op(r, "resume")}>Resume</Button>}
+                    {canDeploy && r.status === "paused" && r.currentWave < r.waves.length - 1 && <Button className="min-h-9 px-3" disabled={busy} onClick={() => op(r, "promote")}>Promote to wave {r.currentWave + 2}</Button>}
+                    {canDeploy && ["draft", "running", "paused"].includes(r.status) && <Button variant="danger" className="min-h-9 px-3" disabled={busy} onClick={() => setHalt({ r, note: "" })}>Halt</Button>}
                   </div>
                 </Cell>
               </Row>

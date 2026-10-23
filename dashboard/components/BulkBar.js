@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import api from "../lib/api";
+import { can } from "../lib/session";
 import { apiError, input } from "../lib/format";
 import Button from "./ui/Button";
 import Modal from "./ui/Modal";
@@ -7,13 +8,13 @@ import { useToast } from "./ui/Toast";
 import useAction from "../lib/useAction";
 
 const ACTIONS = {
-  tag: { label: "Add tag", roles: ["noc", "admin"] },
-  untag: { label: "Remove tag", roles: ["noc", "admin"] },
-  provision: { label: "Apply template", roles: ["admin"], reason: true, danger: true },
-  reboot: { label: "Reboot", roles: ["admin"], reason: true, danger: true, max: 50 }
+  tag: { label: "Add tag", perm: "device.tag" },
+  untag: { label: "Remove tag", perm: "device.tag" },
+  provision: { label: "Apply template", perm: "device.provision", reason: true, danger: true },
+  reboot: { label: "Reboot", perm: "bulk.reboot", reason: true, danger: true, max: 50 }
 };
 
-export default function BulkBar({ ids, role, onDone, onClear }) {
+export default function BulkBar({ ids, user, onDone, onClear }) {
   const toast = useToast();
   const [action, setAction] = useState(null);
   const [form, setForm] = useState({ tag: "", templateId: "", reason: "" });
@@ -41,7 +42,7 @@ export default function BulkBar({ ids, role, onDone, onClear }) {
     }
   });
 
-  const allowed = Object.entries(ACTIONS).filter(([, a]) => a.roles.includes(role));
+  const allowed = Object.entries(ACTIONS).filter(([, a]) => can(user, a.perm));
   if (!ids.length || !allowed.length) return null;
   const tooMany = spec?.max && ids.length > spec.max;
   const ready = spec && !tooMany && (!spec.reason || form.reason.trim()) && (action !== "provision" || form.templateId) && (!action.includes("tag") || form.tag.trim());

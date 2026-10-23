@@ -10,10 +10,11 @@ const Device = require("../models/Device");
 const DeviceProfile = require("../models/DeviceProfile");
 const fw = require("../lib/firmware");
 const runner = require("../lib/firmwareRunner");
-const { requireAuth, requireRole } = require("../middleware/auth");
+const { requireAuth, requirePerm } = require("../middleware/auth");
 
-router.use(requireAuth, requireRole("noc", "admin"));
-const admin = requireRole("admin");
+router.use(requireAuth, requirePerm("firmware.view"));
+const admin = requirePerm("firmware.manage");
+const deploy = requirePerm("firmware.deploy");
 const err = (status, msg) => Object.assign(new Error(msg), { status });
 const MAX_BYTES = () => Number(process.env.FIRMWARE_MAX_MB || 256) * 1048576;
 
@@ -111,7 +112,7 @@ router.post("/rollouts/preview", async (req, res) => {
   res.json({ eligible, online, sample, profileEnabled, release: { status: release.status, version: release.version } });
 });
 
-router.post("/rollouts", admin, async (req, res) => {
+router.post("/rollouts", deploy, async (req, res) => {
   const { release, data, eligible, profileEnabled } = await preview(req.body || {});
   if (release.status !== "approved") throw err(409, "Release must be approved");
   if (!profileEnabled) throw err(409, "Firmware upgrade is not enabled in this model's device profile");
@@ -147,7 +148,7 @@ const OPS = {
   promote: { from: ["paused"], set: r => ({ status: "running", currentWave: r.currentWave + 1 }) }
 };
 
-router.post("/rollouts/:id/:op", admin, async (req, res) => {
+router.post("/rollouts/:id/:op", deploy, async (req, res) => {
   const rollout = await load(Rollout, req.params.id, "Rollout");
   const note = String(req.body?.note || "").trim().slice(0, 500) || undefined;
   if (req.params.op === "halt") {

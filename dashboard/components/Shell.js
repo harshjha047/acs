@@ -1,34 +1,35 @@
-import { useEffect, useState } from "react";
+import { useEffect } from "react";
 import Link from "next/link";
 import { useRouter } from "next/router";
-import { Router as RouterIcon, ScrollText, Users, LogOut, Siren, Activity, Contact, WandSparkles, Cpu } from "lucide-react";
+import { Router as RouterIcon, ScrollText, Users, LogOut, Siren, Activity, Contact, WandSparkles, Cpu, ShieldCheck } from "lucide-react";
+import { useUser, can, clearSession, needsMfaSetup } from "../lib/session";
 
 const nav = [
   { href: "/devices", label: "Devices", icon: RouterIcon },
   { href: "/customers", label: "Customers", icon: Contact },
   { href: "/provisioning", label: "Provisioning", icon: WandSparkles },
-  { href: "/firmware", label: "Firmware", icon: Cpu, roles: ["noc", "admin"] },
+  { href: "/firmware", label: "Firmware", icon: Cpu, perm: "firmware.view" },
   { href: "/outage", label: "Outage & alerts", icon: Siren },
   { href: "/audit", label: "Audit log", icon: ScrollText },
-  { href: "/system", label: "System health", icon: Activity, roles: ["noc", "admin"] },
-  { href: "/users", label: "Users", icon: Users, roles: ["admin"] }
+  { href: "/system", label: "System health", icon: Activity, perm: "system.view" },
+  { href: "/users", label: "Users", icon: Users, perm: "user.manage" },
+  { href: "/account", label: "My account", icon: ShieldCheck }
 ];
 
 export default function Shell({ title, children }) {
   const router = useRouter();
-  const [user, setUser] = useState(null);
+  const user = useUser();
 
   useEffect(() => {
-    if (!localStorage.getItem("token")) {
-      router.replace("/login");
-      return;
-    }
-    setUser(JSON.parse(localStorage.getItem("user") || "null"));
+    if (!localStorage.getItem("token")) router.replace("/login");
   }, [router]);
 
+  useEffect(() => {
+    if (needsMfaSetup(user) && router.pathname !== "/account") router.replace("/account");
+  }, [user, router]);
+
   function logout() {
-    localStorage.removeItem("token");
-    localStorage.removeItem("user");
+    clearSession();
     router.replace("/login");
   }
 
@@ -37,7 +38,7 @@ export default function Shell({ title, children }) {
       <aside className="sticky top-0 flex h-screen w-[72px] flex-col items-center bg-plum py-5">
         <div className="bg-brand bg-clip-text text-lg font-extrabold tracking-tight text-transparent">DIV</div>
         <nav className="mt-10 flex flex-1 flex-col gap-2">
-          {nav.filter(n => !n.roles || n.roles.includes(user?.role)).map(({ href, label, icon: Icon }) => {
+          {nav.filter(n => !n.perm || can(user, n.perm)).map(({ href, label, icon: Icon }) => {
             const active = router.pathname.startsWith(href);
             return (
               <Link

@@ -13,7 +13,13 @@ const stub = (rel, exports) => {
 const tasks = [];
 let rebootCalls = 0;
 const device = { _id: "65f000000000000000000001", genieacsDeviceId: "dev-1" };
-stub("models/User.js", { findById: () => ({ lean: async () => ({ _id: "u1", role: "admin", isActive: true, email: "a@b" }) }) });
+const users = {
+  u1: { _id: "u1", role: "admin", isActive: true, email: "a@b", mfa: { enabledAt: new Date() } },
+  agent: { _id: "agent", role: "agent", isActive: true, email: "ag@b" },
+  nomfa: { _id: "nomfa", role: "noc", isActive: true, email: "n@b" },
+  old: { _id: "old", role: "admin", isActive: true, email: "o@b", tokenVersion: 2, mfa: { enabledAt: new Date() } }
+};
+stub("models/User.js", { findById: id => ({ lean: async () => users[id] || null }) });
 stub("models/Device.js", { findById: async () => device });
 stub("models/AuditLog.js", { create: async () => ({ save: async () => {} }), findOne: () => ({ sort: () => ({ lean: async () => null }) }) });
 stub("genieacsClient.js", {
@@ -32,7 +38,7 @@ app.use("/api/devices", require("../routes/devices"));
 app.use((err, req, res, next) => res.status(500).json({ error: err.message }));
 
 const token = jwt.sign({ id: "u1" }, process.env.JWT_SECRET);
-const post = (base, p, body) => fetch(`${base}${p}`, { method: "POST", headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` }, body: JSON.stringify(body) });
+const post = (base, p, body, t = token) => fetch(`${base}${p}`, { method: "POST", headers: { "Content-Type": "application/json", Authorization: `Bearer ${t}` }, body: JSON.stringify(body) });
 
 test("reboot: parallel clicks send one task, later clicks get 409 while queued, then rate limit", async () => {
   const server = app.listen(0);
@@ -51,6 +57,22 @@ test("reboot: parallel clicks send one task, later clicks get 409 while queued, 
     for (let i = 0; i < 20; i++) last = await post(base, "/reboot", { reason: "test" });
     assert.equal(last.status, 429);
     assert.equal(rebootCalls, 1);
+  } finally {
+    server.close();
+  }
+});
+
+test("auth: agent blocked from actions, MFA setup enforced, revoked and challenge tokens rejected", async () => {
+  const server = app.listen(0);
+  const base = `http://127.0.0.1:${server.address().port}/api/devices/${device._id}`;
+  const sign = claims => jwt.sign(claims, process.env.JWT_SECRET);
+  try {
+    for (const p of ["/reboot", "/refresh", "/diagnostics/ping"]) assert.equal((await post(base, p, {}, sign({ id: "agent" }))).status, 403, p);
+    const nomfa = await post(base, "/reboot", {}, sign({ id: "nomfa" }));
+    assert.equal(nomfa.status, 403);
+    assert.equal((await nomfa.json()).mfaSetupRequired, true);
+    assert.equal((await post(base, "/reboot", {}, sign({ id: "old", tv: 1 }))).status, 401);
+    assert.equal((await post(base, "/reboot", {}, sign({ id: "u1", purpose: "mfa" }))).status, 401);
   } finally {
     server.close();
   }

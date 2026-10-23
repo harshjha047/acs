@@ -8,11 +8,12 @@ import Button from "../components/ui/Button";
 import Modal from "../components/ui/Modal";
 import { useToast } from "../components/ui/Toast";
 import useAction from "../lib/useAction";
+import { Table, Row, Cell } from "../components/ui/Table";
 
 const ROLES = [
-  ["agent", "Agent: view, refresh, diagnostics, Wi-Fi"],
-  ["noc", "NOC: agent + reboot, pre-register devices, tags"],
-  ["admin", "Admin: everything + users, templates, apply templates, bulk reboot, remove devices"]
+  ["agent", "Agent: view devices and results, notes, link customers"],
+  ["noc", "NOC: agent + refresh, diagnostics, Wi-Fi, reboot, pre-register, tags, alerts, firmware view (2FA required)"],
+  ["admin", "Admin: everything + users, templates, apply templates, bulk reboot, remove devices, firmware, factory reset (2FA required)"]
 ];
 const input = "h-11 w-full rounded-control border border-line bg-white px-4 text-sm outline-none focus:border-plum";
 const empty = { name: "", email: "", password: "", role: "agent" };
@@ -27,6 +28,8 @@ export default function UsersPage() {
   const [me, setMe] = useState(null);
   const [saving, setSaving] = useState(null);
   const [creating, runCreate] = useAction();
+  const [logins, setLogins] = useState([]);
+  const [failedOnly, setFailedOnly] = useState(false);
 
   const load = useCallback(() => {
     api.get("/users").then(({ data }) => setUsers(data)).catch(err => setError(apiError(err, "Failed to load users")));
@@ -36,6 +39,24 @@ export default function UsersPage() {
     setMe(JSON.parse(localStorage.getItem("user") || "null"));
     load();
   }, [load]);
+
+  useEffect(() => {
+    api.get(`/users/logins?limit=50${failedOnly ? "&failed=1" : ""}`).then(({ data }) => setLogins(data)).catch(() => {});
+  }, [failedOnly, users]);
+
+  async function revoke(u) {
+    if (saving) return;
+    setSaving(u._id);
+    try {
+      await api.post(`/users/${u._id}/revoke`);
+      toast(`${u.name} signed out everywhere.`, "ok");
+      load();
+    } catch (err) {
+      toast(apiError(err, "Failed"), "bad");
+    } finally {
+      setSaving(null);
+    }
+  }
 
   async function patch(id, body, ok) {
     if (saving) return false;
@@ -84,7 +105,7 @@ export default function UsersPage() {
         <table className="w-full text-sm">
           <thead>
             <tr className="border-b border-line text-left font-mono text-[11px] uppercase tracking-widest text-ink-3">
-              <th className="py-2">Name</th><th>Email</th><th>Role</th><th>Status</th><th>Last login</th><th />
+              <th className="py-2">Name</th><th>Email</th><th>Role</th><th>Status</th><th>2FA</th><th>Last login</th><th />
             </tr>
           </thead>
           <tbody>
@@ -104,10 +125,17 @@ export default function UsersPage() {
                       {ROLES.map(([r]) => <option key={r} value={r}>{r}</option>)}
                     </select>
                   </td>
-                  <td><Badge tone={u.isActive ? "ok" : "muted"}>{u.isActive ? "active" : "disabled"}</Badge></td>
+                  <td>
+                    <Badge tone={u.isActive ? "ok" : "muted"}>{u.isActive ? "active" : "disabled"}</Badge>
+                    {new Date(u.lockedUntil) > new Date() && <Badge tone="bad">locked</Badge>}
+                  </td>
+                  <td><Badge tone={u.mfa?.enabledAt ? "ok" : u.role === "agent" ? "muted" : "warn"}>{u.mfa?.enabledAt ? "on" : "off"}</Badge></td>
                   <td>{when(u.lastLoginAt)}</td>
                   <td className="space-x-2 whitespace-nowrap text-right">
                     <Button variant="secondary" className="min-h-9 px-3" disabled={!!saving} onClick={() => setResetFor(u)}>Password</Button>
+                    {new Date(u.lockedUntil) > new Date() && <Button variant="secondary" className="min-h-9 px-3" disabled={!!saving} onClick={() => patch(u._id, { unlock: true }, "Unlocked.")}>Unlock</Button>}
+                    {u.mfa?.enabledAt && <Button variant="secondary" className="min-h-9 px-3" disabled={!!saving} onClick={() => window.confirm(`Reset 2FA for ${u.name}? They set it up again at next sign-in.`) && patch(u._id, { resetMfa: true }, "2FA reset.")}>Reset 2FA</Button>}
+                    <Button variant="secondary" className="min-h-9 px-3" disabled={!!saving} onClick={() => window.confirm(`Sign ${u.name} out on all devices?`) && revoke(u)}>Sign out</Button>
                     {!self && (
                       <Button variant="secondary" className="min-h-9 px-3" loading={saving === u._id} disabled={!!saving} onClick={() => patch(u._id, { isActive: !u.isActive }, u.isActive ? "User disabled." : "User enabled.")}>
                         {u.isActive ? "Disable" : "Enable"}
@@ -122,6 +150,20 @@ export default function UsersPage() {
         <ul className="mt-4 space-y-1 text-xs text-ink-2">
           {ROLES.map(([r, d]) => <li key={r}>{d}</li>)}
         </ul>
+      </Card>
+
+      <Card title="Sign-in activity" className="mt-4" action={<label className="flex items-center gap-2 text-sm"><input type="checkbox" checked={failedOnly} onChange={e => setFailedOnly(e.target.checked)} /> Failures only</label>}>
+        <Table head={["When", "User", "Result", "IP", "Client"]}>
+          {logins.map(l => (
+            <Row key={l._id}>
+              <Cell>{when(l.at)}</Cell>
+              <Cell>{l.user?.name || l.email}</Cell>
+              <Cell><Badge tone={l.ok ? "ok" : l.reason === "mfa_pending" ? "muted" : "bad"}>{l.reason.replace(/_/g, " ")}</Badge></Cell>
+              <Cell mono>{l.ip}</Cell>
+              <Cell className="max-w-xs truncate text-xs text-ink-2">{l.ua}</Cell>
+            </Row>
+          ))}
+        </Table>
       </Card>
 
       <Modal open={!!form} onClose={() => setForm(null)} title="Add user">

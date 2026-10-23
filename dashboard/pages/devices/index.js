@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import api from "../../lib/api";
+import { useUser, can } from "../../lib/session";
 import { ago, gradeTone, onlineState, ALERT_LABEL, SEVERITY_TONE } from "../../lib/format";
 import Shell from "../../components/Shell";
 import Card from "../../components/ui/Card";
@@ -19,10 +20,9 @@ export default function DeviceList() {
   const [filter, setFilter] = useState("");
   const [tag, setTag] = useState("");
   const [selected, setSelected] = useState(new Set());
-  const [role, setRole] = useState(null);
+  const user = useUser();
   const [tick, setTick] = useState(0);
 
-  useEffect(() => { setRole(JSON.parse(localStorage.getItem("user") || "null")?.role || null); }, []);
 
   useEffect(() => {
     setLoading(true);
@@ -38,7 +38,7 @@ export default function DeviceList() {
   }, [q, filter, tag, tick]);
 
   const offline = devices.filter(d => onlineState(d) === "offline").length;
-  const bulkRole = role === "noc" || role === "admin";
+  const bulkRole = ["device.tag", "device.provision", "bulk.reboot"].some(p => can(user, p));
   const toggle = id => setSelected(s => { const n = new Set(s); n.has(id) ? n.delete(id) : n.add(id); return n; });
   const allOn = devices.length > 0 && devices.every(d => selected.has(d._id));
   const toggleAll = () => setSelected(allOn ? new Set() : new Set(devices.map(d => d._id)));
@@ -60,7 +60,7 @@ export default function DeviceList() {
         <input value={tag} onChange={e => setTag(e.target.value)} placeholder="Tag" className="h-12 w-32 rounded-control border border-line bg-white px-3 text-sm outline-none focus:border-plum" />
         {!loading && <span className="text-sm text-ink-2">{devices.length} devices{offline ? ` · ${offline} offline` : ""}</span>}
       </div>
-      {bulkRole && <BulkBar ids={[...selected]} role={role} onDone={() => setTick(t => t + 1)} onClear={() => setSelected(new Set())} />}
+      {bulkRole && <BulkBar ids={[...selected]} user={user} onDone={() => setTick(t => t + 1)} onClear={() => setSelected(new Set())} />}
       <Card>
         {loading && devices.length === 0 && <p className="text-sm">Loading...</p>}
         {error && <p className="text-sm font-semibold text-bad">{error}</p>}

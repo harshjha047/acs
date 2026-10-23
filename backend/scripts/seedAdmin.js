@@ -14,7 +14,7 @@ const User = require("../models/User");
   const passwordHash = await bcrypt.hash(password, 12);
   const { upsertedCount } = await User.updateOne(
     { email },
-    { $set: { passwordHash, role: "admin", isActive: true }, $setOnInsert: { name: process.env.ADMIN_NAME || "Admin", email } },
+    { $set: { passwordHash, role: "admin", isActive: true, failedLogins: 0 }, $unset: { lockedUntil: 1 }, $inc: { tokenVersion: 1 }, $setOnInsert: { name: process.env.ADMIN_NAME || "Admin", email } },
     { upsert: true }
   );
   console.log(upsertedCount ? `Admin ${email} created` : `Admin ${email} password reset`);

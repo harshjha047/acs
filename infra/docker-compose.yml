@@ -85,6 +85,11 @@ services:
       TELEMETRY_RETENTION_DAYS: ${TELEMETRY_RETENTION_DAYS:-30}
       ALERT_RX_WARN_DBM: ${ALERT_RX_WARN_DBM:--27}
       ALERT_RX_CRIT_DBM: ${ALERT_RX_CRIT_DBM:--29}
+      CWMP_OUIS: ${CWMP_OUIS:-}
+      MFA_REQUIRED_ROLES: ${MFA_REQUIRED_ROLES-noc,admin}
+      MFA_ENC_KEY: ${MFA_ENC_KEY:-}
+      MFA_ISSUER: ${MFA_ISSUER:-DIV ACS}
+      PERMS_GRANT: ${PERMS_GRANT:-}
     volumes:
       - ${BACKUP_DIR:-/opt/acs/backups}:/backups:ro
     depends_on:

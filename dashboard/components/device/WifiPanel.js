@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from "react";
 import api from "../../lib/api";
+import { useUser, can } from "../../lib/session";
 import { apiError } from "../../lib/format";
 import Card from "../ui/Card";
 import Badge from "../ui/Badge";
@@ -73,6 +74,7 @@ export default function WifiPanel({ deviceId }) {
   const [radios, setRadios] = useState(null);
   const [error, setError] = useState("");
   const [editing, setEditing] = useState(null);
+  const canEdit = can(useUser(), "wifi.write");
 
   const load = useCallback(() => {
     api.get(`/devices/${deviceId}/wifi`).then(({ data }) => setRadios(data)).catch(err => setError(apiError(err, "Failed to load Wi-Fi")));
@@ -94,7 +96,7 @@ export default function WifiPanel({ deviceId }) {
               <Cell>{r.autoChannel || r.channel === 0 ? `auto (${r.channelInUse ?? (r.channel || "?")})` : r.channel}</Cell>
               <Cell>{r.clients}</Cell>
               <Cell>{r.security}</Cell>
-              <Cell className="text-right"><Button variant="secondary" className="min-h-9 px-3" onClick={() => setEditing(r)}>Edit</Button></Cell>
+              <Cell className="text-right">{canEdit && <Button variant="secondary" className="min-h-9 px-3" onClick={() => setEditing(r)}>Edit</Button>}</Cell>
             </Row>
           ))}
         </Table>

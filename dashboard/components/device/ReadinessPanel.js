@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import api from "../../lib/api";
+import { useUser, can } from "../../lib/session";
 import { apiError, errTone } from "../../lib/format";
 import Card from "../ui/Card";
 import Badge from "../ui/Badge";
@@ -36,6 +37,7 @@ function WatchBanner({ data, watch }) {
 }
 
 export default function ReadinessPanel({ deviceId }) {
+  const canRefresh = can(useUser(), "device.refresh");
   const toast = useToast();
   const [data, setData] = useState(null);
   const [busy, setBusy] = useState("");
@@ -138,7 +140,7 @@ export default function ReadinessPanel({ deviceId }) {
     <div className="grid gap-4">
       <Card title="Device readiness" action={
         <div className="flex flex-wrap gap-2">
-          <Button variant="secondary" loading={busy === "refresh" || !!watch} disabled={!!busy || !!watch} onClick={fullRefresh}>
+          <Button variant="secondary" loading={busy === "refresh" || !!watch} disabled={!!busy || !!watch || !canRefresh} title={canRefresh ? undefined : "Needs NOC or admin"} onClick={fullRefresh}>
             {watch ? "Fetching…" : "1. Fetch everything"}
           </Button>
           <Button variant="secondary" loading={busy === "recheck"} disabled={!!busy} onClick={recheck}>2. Re-check</Button>

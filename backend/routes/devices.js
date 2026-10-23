@@ -7,7 +7,8 @@ const DeviceProfile = require("../models/DeviceProfile");
 const Customer = require("../models/Customer");
 const AuditLog = require("../models/AuditLog");
 const rateLimit = require("express-rate-limit");
-const { requireAuth, requireRole } = require("../middleware/auth");
+const { requireAuth, requirePerm } = require("../middleware/auth");
+const { can } = require("../lib/permissions");
 const { rootOf, leaves, get } = require("../lib/tree");
 const { ROOTS } = require("../lib/catalog");
 const view = require("../lib/deviceView");
@@ -63,10 +64,10 @@ function once(kind) {
 }
 
 const BULK = {
-  tag: { roles: ["noc", "admin"], max: 500 },
-  untag: { roles: ["noc", "admin"], max: 500 },
-  reboot: { roles: ["admin"], max: 50, reason: true },
-  provision: { roles: ["admin"], max: 200, reason: true }
+  tag: { perm: "device.tag", max: 500 },
+  untag: { perm: "device.tag", max: 500 },
+  reboot: { perm: "bulk.reboot", max: 50, reason: true },
+  provision: { perm: "device.provision", max: 200, reason: true }
 };
 
 async function pool(items, size, fn) {
@@ -79,7 +80,7 @@ router.post("/bulk", async (req, res) => {
   const { action, ids, tag, templateId } = req.body || {};
   const spec = BULK[action];
   if (!spec) return res.status(400).json({ error: "Unknown bulk action" });
-  if (!spec.roles.includes(req.user.role)) return res.status(403).json({ error: "Not allowed for your role" });
+  if (!can(req.user.role, spec.perm)) return res.status(403).json({ error: "Not allowed for your role" });
   const list = [...new Set((Array.isArray(ids) ? ids : []).map(String))].filter(isValidObjectId);
   if (!list.length) return res.status(400).json({ error: "Select at least one device" });
   if (list.length > spec.max) return res.status(400).json({ error: `At most ${spec.max} devices per ${action}` });
@@ -237,14 +238,14 @@ router.get("/:id/provisioning", async (req, res) => {
   res.json({ ...rest, tags: d.tags || [], hasPassword: !!overrides?.password });
 });
 
-router.get("/:id/provisioning/secret", requireRole("noc", "admin"), async (req, res) => {
+router.get("/:id/provisioning/secret", requirePerm("secret.view"), async (req, res) => {
   const d = await Device.findById(req.device._id, "+provisioning.overrides").lean();
   const password = d.provisioning?.overrides?.password || null;
   await AuditLog.create({ user: req.user.id, device: req.device._id, action: "secret_view", result: "success", details: { what: "provisioned Wi-Fi password", found: !!password } });
   res.json({ password });
 });
 
-router.post("/:id/provision", requireRole("admin"), async (req, res) => {
+router.post("/:id/provision", requirePerm("device.provision"), async (req, res) => {
   const { templateId, ssid, ssid5, password } = req.body || {};
   const reason = reasonOf(req);
   if (!reason) return res.status(400).json({ error: "Reason is required" });
@@ -259,7 +260,7 @@ router.post("/:id/provision", requireRole("admin"), async (req, res) => {
   res.status(after.provisioning.state === "applied" ? 200 : 202).json({ ...after.provisioning, outcome });
 });
 
-router.put("/:id/tags", requireRole("noc", "admin"), async (req, res) => {
+router.put("/:id/tags", requirePerm("device.tag"), async (req, res) => {
   const tags = prov.normTags(req.body?.tags);
   const before = req.device.tags;
   req.device.tags = tags;
@@ -324,7 +325,7 @@ function wifiValues(radio, body) {
   return values;
 }
 
-router.put("/:id/wifi", once("wifi"), async (req, res) => {
+router.put("/:id/wifi", requirePerm("wifi.write"), once("wifi"), async (req, res) => {
   const doc = await loadTree(req);
   const radio = view.wifi(doc).find(r => r.id === req.body?.id);
   if (!radio) return res.status(404).json({ error: "Wi-Fi interface not found" });
@@ -343,7 +344,7 @@ router.put("/:id/wifi", once("wifi"), async (req, res) => {
   res.status(statusFor(details.outcome)).json(details);
 });
 
-router.post("/:id/refresh", once("refresh"), async (req, res) => {
+router.post("/:id/refresh", requirePerm("device.refresh"), once("refresh"), async (req, res) => {
   const scope = ["summary", "clients", "full"].includes(req.query.scope) ? req.query.scope : "summary";
   const doc = await loadTree(req);
   const root = rootOf(doc);
@@ -435,7 +436,7 @@ function diagArgs(req, res, next) {
   }
 }
 
-router.post("/:id/diagnostics/:kind", knownKind, diagArgs, once("diagnostic"), async (req, res) => {
+router.post("/:id/diagnostics/:kind", requirePerm("diagnostics.run"), knownKind, diagArgs, once("diagnostic"), async (req, res) => {
   const details = await startDiagnostic(req, req.params.kind, req.diagArgs);
   res.status(statusFor(details.outcome)).json(details);
 });
@@ -465,7 +466,7 @@ router.get("/:id/readiness", async (req, res) => {
   });
 });
 
-router.get("/:id/capture", requireRole("noc", "admin"), async (req, res) => {
+router.get("/:id/capture", requirePerm("device.capture"), async (req, res) => {
   const doc = await loadTree(req);
   const { summary } = await buildSummary(req, doc);
   const root = rootOf(doc);
@@ -517,7 +518,7 @@ router.get("/:id/diagnostics", async (req, res) => {
 
 const reasonOf = req => String(req.body?.reason || "").trim().slice(0, 500);
 
-router.post("/:id/reboot", requireRole("noc", "admin"), once("reboot"), async (req, res) => {
+router.post("/:id/reboot", requirePerm("device.reboot"), once("reboot"), async (req, res) => {
   const reason = reasonOf(req);
   if (!reason) return res.status(400).json({ error: "Reason is required" });
   const details = await audit(req, "reboot", async () => {
@@ -550,7 +551,7 @@ router.get("/:id/firmware", async (req, res) => {
   });
 });
 
-router.post("/:id/firmware", requireRole("admin"), once("reset"), async (req, res) => {
+router.post("/:id/firmware", requirePerm("firmware.deploy"), once("reset"), async (req, res) => {
   const reason = reasonOf(req);
   if (!reason) return res.status(400).json({ error: "Reason is required" });
   if (!isValidObjectId(req.body?.releaseId)) return res.status(400).json({ error: "Pick a release" });
@@ -565,7 +566,7 @@ router.post("/:id/firmware", requireRole("admin"), once("reset"), async (req, re
   res.status(202).json({ jobId: job._id, ...r });
 });
 
-router.post("/:id/factory-reset", requireRole("admin"), once("reset"), async (req, res) => {
+router.post("/:id/factory-reset", requirePerm("factoryReset.execute"), once("reset"), async (req, res) => {
   const reason = reasonOf(req);
   if (!reason) return res.status(400).json({ error: "Reason is required" });
   if (String(req.body?.confirmSerial || "").trim().toLowerCase() !== String(req.device.serialNumber).toLowerCase()) {
@@ -580,7 +581,7 @@ router.post("/:id/factory-reset", requireRole("admin"), once("reset"), async (re
   res.status(202).json(details);
 });
 
-router.delete("/:id", requireRole("admin"), async (req, res) => {
+router.delete("/:id", requirePerm("device.delete"), async (req, res) => {
   const reason = reasonOf(req);
   if (!reason) return res.status(400).json({ error: "Reason is required" });
   const details = await audit(req, "device_remove", async () => {
@@ -600,7 +601,7 @@ router.get("/:id/notes", async (req, res) => {
   res.json(await DeviceNote.find({ device: req.device._id }).sort({ createdAt: -1 }).limit(200).populate("user", "name").lean());
 });
 
-router.post("/:id/notes", async (req, res) => {
+router.post("/:id/notes", requirePerm("device.note"), async (req, res) => {
   const text = String(req.body?.text || "").trim();
   if (!text || text.length > 2000) return res.status(400).json({ error: "Note must be 1-2000 characters" });
   const note = await DeviceNote.create({ device: req.device._id, user: req.user.id, text });
@@ -623,7 +624,7 @@ router.get("/:id/timeline", async (req, res) => {
   res.json(events.sort((a, b) => new Date(b.at) - new Date(a.at)));
 });
 
-router.put("/:id/customer", async (req, res) => {
+router.put("/:id/customer", requirePerm("customer.write"), async (req, res) => {
   const customerId = req.body?.customerId ?? null;
   if (customerId !== null && (!isValidObjectId(customerId) || !(await Customer.exists({ _id: customerId })))) {
     return res.status(400).json({ error: "Invalid customer" });

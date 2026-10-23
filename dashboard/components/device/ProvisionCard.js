@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from "react";
 import api from "../../lib/api";
+import { can } from "../../lib/session";
 import { apiError, errTone, input, when, PROV_TONE, PROV_LABEL } from "../../lib/format";
 import Card from "../ui/Card";
 import Badge from "../ui/Badge";
@@ -8,7 +9,7 @@ import Modal from "../ui/Modal";
 import { useToast } from "../ui/Toast";
 import useAction from "../../lib/useAction";
 
-export default function ProvisionCard({ deviceId, role }) {
+export default function ProvisionCard({ deviceId, user }) {
   const toast = useToast();
   const [p, setP] = useState(null);
   const [templates, setTemplates] = useState([]);
@@ -17,7 +18,8 @@ export default function ProvisionCard({ deviceId, role }) {
   const [preview, setPreview] = useState(null);
   const [tags, setTags] = useState(null);
   const [busy, run] = useAction();
-  const canWrite = role === "noc" || role === "admin";
+  const canWrite = can(user, "device.tag");
+  const canSecret = can(user, "secret.view");
 
   const load = useCallback(() => api.get(`/devices/${deviceId}/provisioning`).then(({ data }) => setP(data)).catch(() => {}), [deviceId]);
   useEffect(() => {
@@ -74,13 +76,13 @@ export default function ProvisionCard({ deviceId, role }) {
   const set = k => e => setForm({ ...form, [k]: e.target.value });
 
   return (
-    <Card title="Provisioning & tags" action={role === "admin" && <Button variant="secondary" disabled={["pending", "queued"].includes(p.state)} onClick={() => setOpen(true)}>Apply template</Button>}>
+    <Card title="Provisioning & tags" action={can(user, "device.provision") && <Button variant="secondary" disabled={["pending", "queued"].includes(p.state)} onClick={() => setOpen(true)}>Apply template</Button>}>
       <div className="grid gap-3 text-sm">
         <div className="flex flex-wrap items-center gap-2">
           {p.state ? <Badge tone={PROV_TONE[p.state]}>{PROV_LABEL[p.state]}</Badge> : <Badge>Not provisioned</Badge>}
           {p.template && <span>{p.template.name}</span>}
           {p.requestedAt && <span className="text-xs text-ink-2">requested {when(p.requestedAt)}{p.requestedBy ? ` by ${p.requestedBy.name}` : ""}</span>}
-          {p.hasPassword && canWrite && <Button variant="secondary" className="min-h-9 px-3" disabled={busy} onClick={reveal}>Show Wi-Fi password</Button>}
+          {p.hasPassword && canSecret && <Button variant="secondary" className="min-h-9 px-3" disabled={busy} onClick={reveal}>Show Wi-Fi password</Button>}
         </div>
         {p.changes?.length > 0 && <ul className="list-disc pl-5 text-xs text-ink-2">{p.changes.map(c => <li key={c}>{c}</li>)}</ul>}
         {p.error && <p className={`text-xs ${p.state === "failed" ? "font-semibold text-bad" : "text-ink-2"}`}>{p.error}</p>}

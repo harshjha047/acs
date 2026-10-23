@@ -6,7 +6,7 @@ const Device = require("../models/Device");
 const Customer = require("../models/Customer");
 const genie = require("../genieacsClient");
 const p = require("../lib/provisioning");
-const { requireAuth, requireRole } = require("../middleware/auth");
+const { requireAuth, requirePerm } = require("../middleware/auth");
 
 router.use(requireAuth);
 
@@ -27,7 +27,7 @@ router.get("/", async (req, res) => {
 
 const saveErr = err => (err.code === 11000 ? Object.assign(new Error("A template with this name already exists"), { status: 409 }) : err);
 
-router.post("/", requireRole("admin"), async (req, res) => {
+router.post("/", requirePerm("template.write"), async (req, res) => {
   const data = p.validateTemplate(req.body);
   p.assertAutoSafe(data);
   if (data.autoApplyToNew) data.armedAt = new Date();
@@ -35,7 +35,7 @@ router.post("/", requireRole("admin"), async (req, res) => {
   res.status(201).json(tpl);
 });
 
-router.patch("/:id", requireRole("admin"), async (req, res) => {
+router.patch("/:id", requirePerm("template.write"), async (req, res) => {
   const data = p.validateTemplate(req.body, { partial: true });
   const merged = { ...req.template.toObject(), ...data };
   p.assertAutoSafe(merged);
@@ -46,7 +46,7 @@ router.patch("/:id", requireRole("admin"), async (req, res) => {
   res.json(req.template);
 });
 
-router.delete("/:id", requireRole("admin"), async (req, res) => {
+router.delete("/:id", requirePerm("template.write"), async (req, res) => {
   const [pre, busy] = await Promise.all([
     PreRegistration.exists({ template: req.template._id, status: "waiting" }),
     Device.exists({ "provisioning.template": req.template._id, "provisioning.state": { $in: ["pending", "queued"] } })
@@ -56,7 +56,7 @@ router.delete("/:id", requireRole("admin"), async (req, res) => {
   res.json({ ok: true });
 });
 
-router.post("/:id/preview", requireRole("noc", "admin"), async (req, res) => {
+router.post("/:id/preview", requirePerm("template.preview"), async (req, res) => {
   const { deviceId, ssid, ssid5, password } = req.body || {};
   if (!isValidObjectId(deviceId)) return res.status(400).json({ error: "Pick a device" });
   const device = await Device.findById(deviceId).lean();
