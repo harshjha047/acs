@@ -49,9 +49,11 @@ if (igd) {
 const now = Date.now();
 const igd = declare("InternetGatewayDevice.DeviceInfo.UpTime", {value: 1}).size;
 const bases = igd
-  ? ["InternetGatewayDevice.IPPingDiagnostics", "InternetGatewayDevice.DownloadDiagnostics"]
-  : ["Device.IP.Diagnostics.IPPing", "Device.IP.Diagnostics.DownloadDiagnostics"];
+  ? ["InternetGatewayDevice.IPPingDiagnostics", "InternetGatewayDevice.DownloadDiagnostics", "InternetGatewayDevice.UploadDiagnostics"]
+  : ["Device.IP.Diagnostics.IPPing", "Device.IP.Diagnostics.DownloadDiagnostics", "Device.IP.Diagnostics.UploadDiagnostics"];
 for (const b of bases) declare(b + ".*", {value: now});
+const trace = igd ? "InternetGatewayDevice.TraceRouteDiagnostics" : "Device.IP.Diagnostics.TraceRoute";
+if (declare(trace + ".DiagnosticsState", {value: now}).size) declare(trace + ".RouteHops.*.*", {path: now, value: now});
 `
 };
 

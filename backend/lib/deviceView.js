@@ -380,6 +380,8 @@ function readiness(doc, s) {
     item("LAN ports", ports.length ? "ok" : "warn", `${ports.length} ports, ${ports.filter(p => p.up).length} up`),
     item("Ping diagnostics", get(doc, ROOTS[root]?.ping || "") ? "ok" : "warn", ROOTS[root]?.ping || "-"),
     item("Speed test (TR-143)", get(doc, ROOTS[root]?.download || "") ? "ok" : "warn", ROOTS[root]?.download || "-"),
+    item("Upload test (TR-143)", get(doc, ROOTS[root]?.upload || "") ? "ok" : "warn", ROOTS[root]?.upload || "-"),
+    item("Traceroute", get(doc, ROOTS[root]?.traceroute || "") ? "ok" : "warn", ROOTS[root]?.traceroute || "-"),
     item("Connection request (instant actions)", s.connectionRequestUrl && !isPrivate(s.connectionRequestUrl) ? "ok" : "warn",
       s.connectionRequestUrl ? `${s.connectionRequestUrl}${isPrivate(s.connectionRequestUrl) ? " (private IP: actions wait for next inform unless ACS can reach it)" : ""}` : "Not reported"),
     item("Inform interval", Number(s.online.interval) <= 600 ? "ok" : "warn", `${s.online.interval}s`)
@@ -392,4 +394,4 @@ function readiness(doc, s) {
   return { items, leafCount, valued, valuedPct, vendorExtensions: vendorExt, opticalCandidates };
 }
 
-module.exports = { summary, wifi, clients, lanPorts, wanConnections, primaryWan, isUp, resolveScalar, readiness, learnedMap, resolveOptical, toDbm, gradeOptical, opticalModule, system };
+module.exports = { summary, wifi, clients, lanPorts, wanConnections, primaryWan, isUp, isPrivate, resolveScalar, readiness, learnedMap, resolveOptical, toDbm, gradeOptical, opticalModule, system };

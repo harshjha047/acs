@@ -44,3 +44,8 @@ export function describeEvent(e) {
 
 export const ALERT_LABEL = { offline: "Offline", low_rx: "Low Rx", reboot_loop: "Reboot loop", unknown_device: "New device" };
 export const SEVERITY_TONE = { critical: "bad", warn: "warn", info: "muted" };
+
+export const ACTION_LABEL = {
+  diagnostics_view: "Viewed diagnostics", reboot: "Reboot", factory_reset: "Factory reset", wifi_update: "Wi-Fi change", firmware_push: "Firmware push", device_remove: "Removed from ACS",
+  auto_provision: "Auto-provision", refresh: "Refresh", ping: "Ping test", traceroute: "Traceroute", speed_test: "Download test", upload_test: "Upload test", capture: "Capture", customer_link: "Customer linked"
+};

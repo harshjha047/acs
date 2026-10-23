@@ -74,6 +74,9 @@ services:
       ADMIN_EMAIL: ${ADMIN_EMAIL}
       ADMIN_PASSWORD: ${ADMIN_PASSWORD}
       SPEEDTEST_URL: http://${ACS_DOMAIN}/speedtest/50MB.bin
+      SPEEDTEST_UPLOAD_BASE: http://${ACS_DOMAIN}/speedtest/upload
+      UPLOAD_TEST_BYTES: ${UPLOAD_TEST_BYTES:-10485760}
+      BACKUP_DIR: /backups
       CWMP_USER: ${CWMP_USER:-}
       CWMP_PASS: ${CWMP_PASS:-}
       MONITOR_INTERVAL_SEC: ${MONITOR_INTERVAL_SEC:-60}
@@ -81,6 +84,8 @@ services:
       TELEMETRY_RETENTION_DAYS: ${TELEMETRY_RETENTION_DAYS:-30}
       ALERT_RX_WARN_DBM: ${ALERT_RX_WARN_DBM:--27}
       ALERT_RX_CRIT_DBM: ${ALERT_RX_CRIT_DBM:--29}
+    volumes:
+      - ${BACKUP_DIR:-/opt/acs/backups}:/backups:ro
     depends_on:
       mongo:
         condition: service_healthy

@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import api from "../lib/api";
+import { ACTION_LABEL } from "../lib/format";
 import Shell from "../components/Shell";
 import Card from "../components/ui/Card";
 import Badge from "../components/ui/Badge";
@@ -37,7 +38,7 @@ export default function Audit() {
                   <td className="py-3">{new Date(l.timestamp).toLocaleString()}</td>
                   <td>{l.user?.name || "—"}</td>
                   <td className="font-mono">{l.device?.serialNumber || "—"}</td>
-                  <td>{l.action}</td>
+                  <td>{ACTION_LABEL[l.action] || l.action}</td>
                   <td><Badge tone={resultTone[l.result]}>{l.result}</Badge></td>
                 </tr>
               ))}

@@ -61,7 +61,9 @@ Simulator: add `sim` to `COMPOSE_PROFILES` (e.g. `COMPOSE_PROFILES=sim`).
     docker compose up -d
 
 - `speedtest/50MB.bin`: file the router downloads for the TR-143 speed test (`http://ACS_DOMAIN/speedtest/50MB.bin`).
-- `seedProvision.js` (re-run after each update): installs provisions/presets `inform` (300 s periodic inform on `0 BOOTSTRAP` / `1 BOOT`), `fullscan` (full tree read on `0 BOOTSTRAP`), `acs-refresh` (light refresh every periodic inform) and `diagnostics` (fetches ping/speed results on `8 DIAGNOSTICS COMPLETE`). Never name a provision `refresh`, `value`, `tag`, `reboot`, `reset`, `download` or `instances`: a user provision with a built-in's name replaces it, and every NBI task (`refreshObject`, `getParameterValues`) then runs the wrong script. The script refuses those names and deletes the old `refresh` provision/preset.
+- Upload test: the router PUTs `UPLOAD_TEST_BYTES` (default 10 MB) to `http://ACS_DOMAIN/speedtest/upload/<token>`; Caddy forwards it to the API, which discards it. The token is derived from `JWT_SECRET` (override with `UPLOAD_TOKEN`); wrong tokens get 404, bodies over 200 MB get 413.
+- System health (`/system`, noc/admin) reads `BACKUP_DIR` read-only at `/backups` in the api container; the backup cron must write `mongo-*.archive.gz` there.
+- `seedProvision.js` (re-run after each update): installs provisions/presets `inform` (300 s periodic inform on `0 BOOTSTRAP` / `1 BOOT`), `fullscan` (full tree read on `0 BOOTSTRAP`), `acs-refresh` (light refresh every periodic inform) and `diagnostics` (fetches ping, download, upload and traceroute results on `8 DIAGNOSTICS COMPLETE`). Never name a provision `refresh`, `value`, `tag`, `reboot`, `reset`, `download` or `instances`: a user provision with a built-in's name replaces it, and every NBI task (`refreshObject`, `getParameterValues`) then runs the wrong script. The script refuses those names and deletes the old `refresh` provision/preset.
 
 ## ACS authentication (`cwmp.auth`)
 

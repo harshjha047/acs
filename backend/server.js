@@ -10,6 +10,9 @@ for (const key of ["MONGO_URI", "JWT_SECRET", "GENIEACS_NBI_URL"]) {
 
 const app = express();
 app.set("trust proxy", 1);
+const sink = require("./lib/uploadSink");
+app.put("/speedtest/upload/:token", sink.handler);
+app.post("/speedtest/upload/:token", sink.handler);
 app.use(helmet());
 app.use(cors({ origin: (process.env.CORS_ORIGIN || "http://localhost:3000").split(",") }));
 app.use(express.json({ limit: "100kb" }));

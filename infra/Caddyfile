@@ -3,7 +3,14 @@
 }
 
 (acs) {
-	handle_path /speedtest/* {
+	handle /speedtest/upload/* {
+		request_body {
+			max_size 200MB
+		}
+		reverse_proxy api:4000
+	}
+	handle /speedtest/* {
+		uri strip_prefix /speedtest
 		root * /srv/speedtest
 		file_server
 	}

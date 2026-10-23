@@ -25,7 +25,8 @@ const DeviceSchema = new Schema({
   offlineSince: { type: Date },
   lastBootAt: { type: Date },
   lastSampleAt: { type: Date },
-  mon: { type: Schema.Types.Mixed }
+  mon: { type: Schema.Types.Mixed },
+  capabilities: { type: Schema.Types.Mixed }
 }, { timestamps: true });
 
 DeviceSchema.index({ serialNumber: 1 });

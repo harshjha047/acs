@@ -16,6 +16,8 @@ const Alert = require("../models/Alert");
 const Telemetry = require("../models/Telemetry");
 const DeviceEvent = require("../models/DeviceEvent");
 const { series } = require("../lib/telemetry");
+const { capabilities } = require("../lib/capabilities");
+const sink = require("../lib/uploadSink");
 
 router.use(requireAuth);
 
@@ -251,9 +253,9 @@ async function startDiagnostic(req, kind, args) {
   const doc = await loadTree(req);
   const primary = view.wanConnections(doc).length ? view.summary(doc).wan.primary : null;
   const values = diag.request(doc, kind, args, primary?.path);
-  return audit(req, kind === "ping" ? "ping" : "speed_test", async () => {
+  return audit(req, diag.actionOf(kind), async () => {
     const { outcome, task } = await genie.setParameterValues(req.device.genieacsDeviceId, values, { timeout: 15000 });
-    return { result: outcome, details: { outcome, taskId: task?._id, ...args, interface: values.find(([p]) => p.endsWith(".Interface"))?.[1] || null } };
+    return { result: outcome, details: { outcome, taskId: task?._id, ...args, ...(args.url && { url: sink.redact(args.url) }), interface: values.find(([p]) => p.endsWith(".Interface"))?.[1] || null } };
   });
 }
 
@@ -261,8 +263,7 @@ const TERMINAL = ["complete", "error"];
 
 async function readDiagnostic(req, kind) {
   let doc = await loadTree(req);
-  const action = kind === "ping" ? "ping" : "speed_test";
-  const last = await AuditLog.findOne({ device: req.device._id, action }).sort({ timestamp: -1 });
+  const last = await AuditLog.findOne({ device: req.device._id, action: diag.actionOf(kind) }).sort({ timestamp: -1 });
   const taskId = last?.details?.taskId;
   const faults = taskId ? await genie.getFaults(req.device.genieacsDeviceId).catch(() => []) : [];
   const fault = faults.find(f => f._id === `${req.device.genieacsDeviceId}:task_${taskId}`);
@@ -270,9 +271,9 @@ async function readDiagnostic(req, kind) {
   let result = diag.read(doc, kind);
 
   if (req.query.live && last && !fault && !(isFresh(result) && TERMINAL.includes(result.state))) {
-    const paths = diag.resultPaths(doc, kind);
-    if (paths.length) {
-      const { outcome } = await genie.getParameterValues(req.device.genieacsDeviceId, paths, { timeout: 8000 }).catch(() => ({}));
+    const task = diag.liveTask(doc, kind);
+    if (task) {
+      const { outcome } = await genie.queueTask(req.device.genieacsDeviceId, task, { timeout: 8000 }).catch(() => ({}));
       if (outcome === "success") result = diag.read((doc = await loadTree(req)), kind);
     }
   }
@@ -292,24 +293,52 @@ async function readDiagnostic(req, kind) {
   };
 }
 
-router.post("/:id/diagnostics/ping", once("diagnostic"), async (req, res) => {
-  const host = String(req.body?.host || "8.8.8.8").trim();
-  const count = Math.min(Math.max(parseInt(req.body?.count, 10) || 4, 1), 10);
-  if (!HOST_RE.test(host)) return res.status(400).json({ error: "Invalid host" });
-  const details = await startDiagnostic(req, "ping", { host, count });
+const clamp = (v, lo, hi, d) => Math.min(Math.max(parseInt(v, 10) || d, lo), hi);
+function hostArg(body) {
+  const host = String(body?.host || "8.8.8.8").trim();
+  if (!HOST_RE.test(host)) throw Object.assign(new Error("Invalid host"), { status: 400 });
+  return host;
+}
+const DIAG_ARGS = {
+  ping: body => ({ host: hostArg(body), count: clamp(body?.count, 1, 10, 4) }),
+  traceroute: body => ({ host: hostArg(body), maxHops: clamp(body?.maxHops, 1, 30, 20), tries: clamp(body?.tries, 1, 3, 3) }),
+  speed: () => {
+    if (!process.env.SPEEDTEST_URL) throw Object.assign(new Error("SPEEDTEST_URL is not configured"), { status: 503 });
+    return { url: process.env.SPEEDTEST_URL };
+  },
+  upload: () => {
+    if (!process.env.SPEEDTEST_UPLOAD_BASE) throw Object.assign(new Error("SPEEDTEST_UPLOAD_BASE is not configured"), { status: 503 });
+    return { url: sink.url(), bytes: sink.testBytes() };
+  }
+};
+const knownKind = (req, res, next) => (DIAG_ARGS[req.params.kind] ? next() : res.status(404).json({ error: "Unknown test" }));
+
+function diagArgs(req, res, next) {
+  try {
+    req.diagArgs = DIAG_ARGS[req.params.kind](req.body);
+    next();
+  } catch (err) {
+    res.status(err.status || 400).json({ error: err.message });
+  }
+}
+
+router.post("/:id/diagnostics/:kind", knownKind, diagArgs, once("diagnostic"), async (req, res) => {
+  const details = await startDiagnostic(req, req.params.kind, req.diagArgs);
   res.status(statusFor(details.outcome)).json(details);
 });
 
-router.get("/:id/diagnostics/ping", async (req, res) => res.json(await readDiagnostic(req, "ping")));
-
-router.post("/:id/diagnostics/speed", once("diagnostic"), async (req, res) => {
-  const url = process.env.SPEEDTEST_URL;
-  if (!url) return res.status(503).json({ error: "SPEEDTEST_URL is not configured" });
-  const details = await startDiagnostic(req, "speed", { url });
-  res.status(statusFor(details.outcome)).json(details);
+router.get("/:id/diagnostics/:kind", knownKind, async (req, res) => {
+  const r = await readDiagnostic(req, req.params.kind);
+  res.json(r.url ? { ...r, url: sink.redact(r.url) } : r);
 });
 
-router.get("/:id/diagnostics/speed", async (req, res) => res.json(await readDiagnostic(req, "speed")));
+router.get("/:id/capabilities", async (req, res) => {
+  const doc = await loadTree(req);
+  const { summary, profile } = await buildSummary(req, doc);
+  const caps = capabilities(doc, summary, profile || {});
+  await Device.updateOne({ _id: req.device._id }, { $set: { capabilities: Object.fromEntries(Object.entries(caps).map(([k, v]) => [k, v.supported])) } });
+  res.json(caps);
+});
 
 router.get("/:id/readiness", async (req, res) => {
   const doc = await loadTree(req);

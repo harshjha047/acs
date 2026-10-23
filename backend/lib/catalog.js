@@ -54,6 +54,8 @@ const ROOTS = {
     lanPorts: `${IGD}.LANDevice.*.LANEthernetInterfaceConfig.*`,
     ping: `${IGD}.IPPingDiagnostics`,
     download: `${IGD}.DownloadDiagnostics`,
+    upload: `${IGD}.UploadDiagnostics`,
+    traceroute: `${IGD}.TraceRouteDiagnostics`,
     refresh: {
       summary: [`${IGD}.DeviceInfo`, `${IGD}.ManagementServer`, `${IGD}.WANDevice`],
       clients: [`${IGD}.LANDevice`]
@@ -69,6 +71,8 @@ const ROOTS = {
     lanPorts: `${DEV}.Ethernet.Interface.*`,
     ping: `${DEV}.IP.Diagnostics.IPPing`,
     download: `${DEV}.IP.Diagnostics.DownloadDiagnostics`,
+    upload: `${DEV}.IP.Diagnostics.UploadDiagnostics`,
+    traceroute: `${DEV}.IP.Diagnostics.TraceRoute`,
     refresh: {
       summary: [`${DEV}.DeviceInfo`, `${DEV}.ManagementServer`, `${DEV}.PPP`, `${DEV}.IP`, `${DEV}.Optical`],
       clients: [`${DEV}.Hosts`, `${DEV}.WiFi`, `${DEV}.Ethernet`]

@@ -49,6 +49,8 @@ router.get("/outage", requireAuth, async (req, res) => {
   });
 });
 
+router.get("/system/health", requireAuth, requireRole("noc", "admin"), async (req, res) => res.json(await require("../lib/health").report()));
+
 router.post("/monitor/run", requireAuth, requireRole("admin"), async (req, res) => res.json(await monitor.run()));
 
 module.exports = router;

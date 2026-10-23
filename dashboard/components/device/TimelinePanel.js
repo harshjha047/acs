@@ -1,16 +1,13 @@
 import { useCallback, useEffect, useState } from "react";
 import api from "../../lib/api";
-import { apiError, when, EVENT_LABEL, describeEvent } from "../../lib/format";
+import { apiError, when, EVENT_LABEL, describeEvent, ACTION_LABEL } from "../../lib/format";
 import Card from "../ui/Card";
 import Badge from "../ui/Badge";
 import Button from "../ui/Button";
 import { useToast } from "../ui/Toast";
 import useAction from "../../lib/useAction";
 
-const ACTION = {
-  diagnostics_view: "Viewed diagnostics", reboot: "Reboot", factory_reset: "Factory reset", wifi_update: "Wi-Fi change", firmware_push: "Firmware push", device_remove: "Removed from ACS",
-  auto_provision: "Auto-provision", refresh: "Refresh", ping: "Ping test", speed_test: "Speed test", capture: "Capture", customer_link: "Customer linked"
-};
+const ACTION = ACTION_LABEL;
 const RESULT = { success: "ok", failed: "bad", pending: "warn" };
 
 function describe(e) {
@@ -21,7 +18,8 @@ function describe(e) {
   const d = e.details || {};
   if (e.action === "wifi_update") return (d.changes || []).map(([p, v]) => `${p.split(".").slice(-2).join(".")} → ${v}`).join(", ");
   if (e.action === "ping") return `${d.host} ×${d.count}${d.testState ? ` · ${d.testRawState || d.testState}` : ""}`;
-  if (e.action === "speed_test" && d.testState) return d.testRawState || d.testState;
+  if (e.action === "traceroute") return `${d.host}${d.testState ? ` · ${d.testRawState || d.testState}` : ""}`;
+  if (["speed_test", "upload_test"].includes(e.action) && d.testState) return d.testRawState || d.testState;
   if (e.action === "refresh") return d.scope;
   if (e.action === "reboot" && d.downtimeSec !== undefined) return `${d.reason} · back after ${d.downtimeSec}s`;
   if (d.reason) return d.reason;
