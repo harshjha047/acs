@@ -7,6 +7,7 @@ const HINT = {
   ok: "Signal within range.",
   warn: "Marginal. Check patch cord and connectors; monitor.",
   bad: "Out of range. Likely fiber cut, bend or dirty connector. Dispatch a technician.",
+  hot: "Too strong: receiver overload risk. Fit an attenuator (5–10 dB) or check for a short drop/bench cord.",
   unknown: "Not reported by this device."
 };
 
@@ -47,7 +48,7 @@ export default function OpticalCard({ optical }) {
         </dl>
       )}
       {optical.verified && <p className="mt-3 text-xs text-ok">Units verified on a real device of this model.</p>}
-      <p className="mt-3 text-sm text-ink">{HINT[optical.rxPower.grade]}</p>
+      <p className="mt-3 text-sm text-ink">{HINT[optical.rxPower.grade !== "ok" && optical.rxPower.dbm > -8 ? "hot" : optical.rxPower.grade]}</p>
     </Card>
   );
 }
